@@ -13,11 +13,13 @@ export interface IUser extends Document {
     is_email_verified: boolean;
     is_phone_verified: boolean;
     avatar?: string;
+    address: {}[];
     location?: {
         type: 'Point';
         coordinates: [number, number]; // [lng, lat]
     };
     driverProfile?: {
+        carSeat: number;
         carModel: string;
         carPlate: string;
         licenseNumber: string;

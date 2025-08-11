@@ -19,17 +19,23 @@ const UserSchema = new Schema<IUser>(
             coordinates: { type: [Number], default: [0, 0] },
         },
         driverProfile: {
-            carModel: String,
-            carPlate: String,
-            licenseNumber: String,
-            licenseExpiry: Date,
-            documents: [{ name: String, url: String }],
+            carSeat: { type: Number, default: 0 },    
+            carModel: { type: String, default: '' },
+            carPlate: { type: String, default: '' },
+            licenseNumber: { type: String, default: '' },
+            licenseExpiry: { type: Date, default: Date.now },
+            documents: [{ name: { type: String, default: '' }, url: { type: String, default: '' } }],
             isVerified: { type: Boolean, default: false },
+            rating: {
+                total: { type: Number, default: 0 },
+                count: { type: Number, default: 0 },
+            },
         },
         rating: {
             total: { type: Number, default: 0 },
             count: { type: Number, default: 0 },
         },
+        address: [],
         createdAt: { type: Date, default: Date.now },
         updatedAt: { type: Date, default: Date.now },
     }
