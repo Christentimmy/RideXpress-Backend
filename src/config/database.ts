@@ -11,3 +11,4 @@ export async function connectToDatabase() {
         console.error("Database connection error:", error);
     }
 }
+

@@ -1,0 +1,38 @@
+import mongoose, { Schema } from 'mongoose';
+import { IUser } from '../types/user_type';
+
+const UserSchema = new Schema<IUser>(
+    {
+        first_name: { type: String, required: true, trim: true },
+        last_name: { type: String, required: true, trim: true },
+        email: { type: String, unique: true, sparse: true, lowercase: true },
+        phone: { type: String, unique: true, required: true },
+        password: { type: String, required: true },
+        role: { type: String, enum: ['rider', 'driver', 'admin'], default: 'rider' },
+        avatar: { type: String },
+        location: {
+            type: { type: String, enum: ['Point'], default: 'Point' },
+            coordinates: { type: [Number], default: [0, 0] },
+        },
+        driverProfile: {
+            carModel: String,
+            carPlate: String,
+            licenseNumber: String,
+            licenseExpiry: Date,
+            documents: [{ name: String, url: String }],
+            isVerified: { type: Boolean, default: false },
+        },
+        rating: {
+            total: { type: Number, default: 0 },
+            count: { type: Number, default: 0 },
+        },
+        createdAt: { type: Date, default: Date.now },
+        updatedAt: { type: Date, default: Date.now },
+    }
+);
+
+UserSchema.index({ location: '2dsphere' });
+UserSchema.index({ phone: 1 });
+UserSchema.index({ email: 1 });
+
+export default mongoose.model<IUser>('User', UserSchema);
