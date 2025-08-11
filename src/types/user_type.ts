@@ -1,12 +1,17 @@
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 export interface IUser extends Document {
+    _id: Types.ObjectId;
     first_name: string;
     last_name: string;
     email: string;
     phone: string;
     password: string;
     role: 'rider' | 'driver' | 'admin';
+    account_status: 'active' | 'suspended' | 'banned';
+    availability_status: 'online' | 'offline' | 'on_trip' | 'away';
+    is_email_verified: boolean;
+    is_phone_verified: boolean;
     avatar?: string;
     location?: {
         type: 'Point';

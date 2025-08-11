@@ -5,6 +5,10 @@ const UserSchema = new Schema<IUser>(
     {
         first_name: { type: String, required: true, trim: true },
         last_name: { type: String, required: true, trim: true },
+        account_status: { type: String, enum: ['active', 'suspended', 'banned'], default: 'active' },
+        availability_status: { type: String, enum: ['online', 'offline', 'on_trip', 'away'], default: 'online' },
+        is_email_verified: { type: Boolean, default: false },
+        is_phone_verified: { type: Boolean, default: false },
         email: { type: String, unique: true, sparse: true, lowercase: true },
         phone: { type: String, unique: true, required: true },
         password: { type: String, required: true },
