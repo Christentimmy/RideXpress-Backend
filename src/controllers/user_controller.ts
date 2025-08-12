@@ -583,4 +583,35 @@ export const userController = {
         }
     },
 
+    cancelRide: async (req: Request, res: Response) => {
+        try {
+            const { rideId } = req.body;
+            if (!rideId) {
+                res.status(400).json({ message: "Invalid Request" });
+                return;
+            }
+            const ride = await Ride.findById(rideId);
+            if (!ride) {
+                res.status(404).json({ message: "Ride not found" });
+                return;
+            }
+            if (ride.status !== "accepted") {
+                res.status(400).json({ message: "Ride is not accepted" });
+                return;
+            }
+
+            if ((ride.rider.toString() !== res.locals.user._id.toString() && ride.driver.toString() !== res.locals.user._id.toString())) {
+                res.status(400).json({ message: "You are not authorized to cancel this ride" });
+                return;
+            }
+            ride.status = "cancelled";
+            await ride.save();
+            res.status(200).json({ message: "Ride cancelled" });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Internal server error" });
+        }
+    },
+
+
 };

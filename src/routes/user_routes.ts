@@ -28,6 +28,7 @@ router.get("/get-today-ride-summary", userController.getTodayRideSummary);
 router.get("/get-all-ride-request", userController.getAllRideRequest);
 router.post("/accept-ride", userController.acceptRide);
 router.post("/decline-ride", userController.declineRide);
+router.post("/cancel-ride", userController.cancelRide);
 
 
 router.patch("/upload-vehicle-docs", roleMiddleware("driver"), uploadMore.fields([
