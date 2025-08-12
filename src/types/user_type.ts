@@ -29,7 +29,7 @@ export interface IUser extends Document {
     };
     rating: {
         total: number;
-        count: number;
+        avg: number;
     };
     createdAt: Date;
     updatedAt: Date;

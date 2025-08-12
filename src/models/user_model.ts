@@ -16,7 +16,7 @@ const UserSchema = new Schema<IUser>(
         avatar: { type: String },
         location: {
             type: { type: String, enum: ['Point'], default: 'Point' },
-            coordinates: { type: [Number], default: [0, 0] },
+            coordinates: { type: [Number], default: [0, 0] },//lng,lat
         },
         driverProfile: {
             carSeat: { type: Number, default: 0 },    
@@ -33,7 +33,7 @@ const UserSchema = new Schema<IUser>(
         },
         rating: {
             total: { type: Number, default: 0 },
-            count: { type: Number, default: 0 },
+            avg: { type: Number, default: 0 },
         },
         address: [],
         createdAt: { type: Date, default: Date.now },
