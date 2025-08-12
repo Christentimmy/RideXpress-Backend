@@ -21,6 +21,8 @@ router.use(statusChecker);
 router.post("/find-nearby-drivers", userController.findNearByDrivers);
 router.get("/get-all-ride-request", userController.getAllRideRequest);
 router.get("/get-current-ride", userController.getCurrentRide);
+router.get("/get-ride-history", userController.getRideHistory);
+router.get("/get-rating", userController.getAllRatings);
 router.post("/rate-driver", userController.rateTrip);
 router.get("/get-ride/:rideId", userController.getRideById);
 router.post("/accept-ride", userController.acceptRide);

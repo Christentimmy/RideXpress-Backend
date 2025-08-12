@@ -464,6 +464,52 @@ export const userController = {
         }
     },
 
+    getAllRatings: async (req: Request, res: Response) => {
+        try {
+            const user = res.locals.user;
+            if (!user) {
+                res.status(404).json({ message: "User not found" });
+                return;
+            }
+            const query = {
+                $or: [
+                    { user: user._id },
+                    { driver: user._id },
+                ],
+            };
+            const ratings = await Rating.find(query)
+                .populate<{ user: IUser }>("user", "first_name last_name avatar")
+                .populate<{ driver: IUser }>("driver", "first_name last_name avatar");
+
+            if (!ratings) {
+                res.status(404).json({ message: "No ratings found" });
+                return;
+            }
+
+            const response = ratings.map((rating) => ({
+                ratingId: rating._id,
+                user: {
+                    avatar: rating.user.avatar,
+                    first_name: rating.user.first_name,
+                    last_name: rating.user.last_name,
+                },
+                driver: {
+                    avatar: rating.driver.avatar,
+                    first_name: rating.driver.first_name,
+                    last_name: rating.driver.last_name,
+                },
+                rating: rating.rating,
+                comment: rating.comment,
+                createdAt: rating.createdAt,
+            }));
+
+            res.status(200).json({ message: "Ratings found", data: response });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Server error" });
+        }
+    },
+
     getTodayRideSummary: async (req: Request, res: Response) => {
         try {
             const user = res.locals.user;
