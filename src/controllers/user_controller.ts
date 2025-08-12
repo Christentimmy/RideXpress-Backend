@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import User from "../models/user_model";
 import Ride from "../models/ride_model";
 import { IUser } from "../types/user_type";
+import Rating from "../models/rating_model";
 
 export const userController = {
     uploadProfile: async (req: Request, res: Response) => {
@@ -206,66 +207,79 @@ export const userController = {
         }
     },
 
-    rateDriver: async (req: Request, res: Response) => {
+    rateTrip: async (req: Request, res: Response) => {
         try {
-            if (!req.body) {
-                res.status(400).json({ message: "All fields are required" });
-                return;
-            }
-            const user = res.locals.user;
-            if (!user) {
-                res.status(400).json({ message: "User not authenticated" });
-                return;
-            }
-
             const { driverId, rating, comment } = req.body;
-            if (!driverId || !rating || !comment) {
-                res.status(400).json({ message: "All fields are required" });
-                return;
+            const user = res.locals.user;
+
+            if (!user) {
+                return res.status(400).json({ message: "User not authenticated" });
             }
 
+            if (!driverId || !rating) {
+                return res.status(400).json({ message: "All fields are required" });
+            }
+
+            if (rating < 1 || rating > 5) {
+                return res.status(400).json({ message: "Rating must be between 1 and 5" });
+            }
+
+            // Find the completed & paid ride that involves both parties
             const ride = await Ride.findOne({
-                rider: user._id,
-                driver: driverId,
+                rider: user.role === "rider" ? user._id : driverId,
+                driver: user.role === "driver" ? user._id : driverId,
                 status: "completed",
                 payment_status: "paid",
             });
 
             if (!ride) {
-                res.status(400).json({ message: "Ride not found" });
-                return;
+                return res.status(400).json({ message: "Ride not found" });
             }
 
-            if (ride.rated) {
-                res.status(400).json({ message: "Driver already rated" });
-                return;
+            // Prevent duplicate ratings based on role
+            if (user.role === "rider" && ride.rated_by_rider) {
+                return res.status(400).json({ message: "You have already rated this driver" });
+            }
+            if (user.role === "driver" && ride.rated_by_driver) {
+                return res.status(400).json({ message: "You have already rated this rider" });
             }
 
-            await Ride.findByIdAndUpdate(ride._id, { rated: true });
+            // Mark as rated based on role
+            if (user.role === "rider") {
+                ride.rated_by_rider = true;
+            } else {
+                ride.rated_by_driver = true;
+            }
+            await ride.save();
 
-            if (rating < 1 || rating > 5) {
-                res.status(400).json({ message: "Rating must be between 1 and 5" });
-                return;
+            // Figure out who is being rated
+            const personToRateId = user.role === "rider" ? driverId : ride.rider;
+
+            const personToRate = await User.findById(personToRateId).select("rating").lean();
+            if (!personToRate) {
+                return res.status(400).json({ message: "User to be rated not found" });
             }
 
-            const driver = await User.findById(driverId).select("rating").lean();
-            if (!driver) {
-                res.status(400).json({ message: "Driver not found" });
-                return;
-            }
-
-            const currentTotal = driver.rating.total || 0;
-            const currentAvg = driver.rating.avg || 0;
+            const currentTotal = personToRate.rating.total || 0;
+            const currentAvg = personToRate.rating.avg || 0;
 
             const updatedTotal = currentTotal + 1;
             const updatedAvg = ((currentAvg * currentTotal) + rating) / updatedTotal;
 
-            await User.findByIdAndUpdate(driverId, {
+            await User.findByIdAndUpdate(personToRateId, {
                 $set: { "rating.avg": Number(updatedAvg.toFixed(1)) },
                 $inc: { "rating.total": 1 }
             });
 
-            res.status(200).json({ message: "Driver rated successfully" });
+            const rateModel = new Rating({
+                user: user.role === "rider" ? user._id : driverId,
+                driver: user.role === "driver" ? user._id : driverId,
+                rating,
+                comment,
+            });
+            await rateModel.save();
+
+            res.status(200).json({ message: `${user.role === "rider" ? "Driver" : "Rider"} rated successfully` });
         } catch (error) {
             console.log(error);
             res.status(500).json({ message: "Internal server error" });
@@ -297,7 +311,8 @@ export const userController = {
                     dropoff_location: ride.dropoff_location,
                     fare: ride.fare,
                     amount_paid: ride.amount_paid,
-                    rated: ride.rated,
+                    rated_by_rider: ride.rated_by_rider,
+                    rated_by_driver: ride.rated_by_driver,
                     requested_at: ride.requested_at,
                 };
             });
@@ -331,7 +346,8 @@ export const userController = {
                 dropoff_location: ride.dropoff_location,
                 fare: ride.fare,
                 amount_paid: ride.amount_paid,
-                rated: ride.rated,
+                rated_by_rider: ride.rated_by_rider,
+                rated_by_driver: ride.rated_by_driver,
                 requested_at: ride.requested_at,
                 driver: {
                     _id: ride.driver._id,
@@ -645,7 +661,7 @@ export const userController = {
                 coordinates: [ride.pickup_location.lng, ride.pickup_location.lat],
             };
             driver.save();
-            
+
             await ride.save();
             res.status(200).json({ message: "Ride started" });
         } catch (error) {

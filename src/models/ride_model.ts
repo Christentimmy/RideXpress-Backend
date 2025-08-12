@@ -35,7 +35,8 @@ const rideSchema = new Schema<IRide>(
         transaction_id: { type: String, default: null },
         amount_paid: { type: Number, default: 0 },
         excluded_drivers: { type: [Schema.Types.ObjectId], ref: "User", default: [] },
-        rated: { type: Boolean, default: false },
+        rated_by_rider: { type: Boolean, default: false },
+        rated_by_driver: { type: Boolean, default: false },
     },
     { timestamps: true }
 );

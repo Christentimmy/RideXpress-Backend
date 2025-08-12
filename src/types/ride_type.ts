@@ -14,5 +14,6 @@ export interface IRide extends Document {
     transaction_id?: string;
     amount_paid?: number;
     excluded_drivers?: mongoose.Types.ObjectId[];
-    rated: boolean;
+    rated_by_rider: boolean;
+    rated_by_driver: boolean;
 }
