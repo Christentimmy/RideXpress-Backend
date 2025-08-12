@@ -321,6 +321,31 @@ export const authController = {
             console.error(error);
             res.status(500).json({ message: "Internal Server Error" });
         }
-    }
+    },
+
+    updateEmailOrNumber: async (req: Request, res: Response) => { 
+        try {
+            const { email, phone_number } = req.body;
+            const user = res.locals.user;
+            if (!user) {
+                res.status(400).json({ message: "Invalid Request" });
+                return;
+            }
+            if (email) {
+                user.email = email;
+            }
+            if (phone_number) {
+                user.phone = phone_number;
+            }
+            await user.save();
+            res.status(200).json({ message: "Email or Number updated successfully" });
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Internal Server Error" });
+        }
+
+    },
+
 };
 

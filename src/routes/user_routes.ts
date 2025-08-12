@@ -30,6 +30,7 @@ router.post("/decline-ride", userController.declineRide);
 router.post("/cancel-ride", userController.cancelRide);
 router.post("/start-ride", userController.startRide);
 
+router.get("/get-driver-ride-stat", userController.getDriverRideStat);
 router.post("/edit-profile", uploadProfile.single("avatar"), userController.editProfile);
 router.get("/get-today-ride-summary", userController.getTodayRideSummary);
 

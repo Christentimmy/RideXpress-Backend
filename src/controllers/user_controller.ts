@@ -748,5 +748,33 @@ export const userController = {
         }
     },
 
+    getDriverRideStat: async (req: Request, res: Response) => {
+        try {
+            const user = res.locals.user;
+            if (!user) {
+                res.status(400).json({ message: "Invalid Request" });
+                return;
+            }
+
+            const allTripCounts = user.driverProfile.allTrips;
+            const acceptanceRate = await Ride.countDocuments({ driver: user._id, status: "completed" });
+            const cancellationRate = await Ride.countDocuments({ driver: user._id, status: "cancelled" });
+
+            const acceptanceRatePercentage = (acceptanceRate / allTripCounts) * 100;
+            const cancellationRatePercentage = (cancellationRate / allTripCounts) * 100;
+
+            res.status(200).json({
+                message: "Driver ride stats",
+                data: {
+                    allTripCounts,
+                    acceptanceRatePercentage,
+                    cancellationRatePercentage,
+                }
+            });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Internal server error" });
+        }
+    },
 
 };
