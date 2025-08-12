@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import User from "../models/user_model";
 import Ride from "../models/ride_model";
+import { IUser } from "../types/user_type";
 
 export const userController = {
     uploadProfile: async (req: Request, res: Response) => {
@@ -230,6 +231,84 @@ export const userController = {
             });
 
             res.status(200).json({ message: "Driver rated successfully" });
+        } catch (error) {
+            console.log(error);
+            res.status(500).json({ message: "Internal server error" });
+        }
+    },
+
+    getRideHistory: async (req: Request, res: Response) => {
+        try {
+            const userId = res.locals.userId;
+            if (!userId) {
+                res.status(400).json({ message: "User not authenticated" });
+                return;
+            }
+            const rides = await Ride.find({
+                rider: userId,
+            }).populate<{ driver: IUser }>("driver", "driverProfile avatar first_name last_name email rating")
+                .populate<{ rider: IUser }>("rider", "avatar first_name last_name email")
+                .sort({ requested_at: -1 });
+            if (!rides) {
+                res.status(404).json({ message: "No ride history found" });
+                return;
+            }
+
+            const response = rides.map((ride) => {
+                return {
+                    _id: ride._id,
+                    status: ride.status,
+                    pickup_location: ride.pickup_location,
+                    dropoff_location: ride.dropoff_location,
+                    fare: ride.fare,
+                    amount_paid: ride.amount_paid,
+                    rated: ride.rated,
+                    requested_at: ride.requested_at,
+                };
+            });
+
+            res.status(200).json({ message: "Ride history found", data: response });
+        } catch (error) {
+            console.log(error);
+            res.status(500).json({ message: "Internal server error" });
+        }
+    },
+
+    getRideById: async (req: Request, res: Response) => {
+        try {
+            const { rideId } = req.params;
+            if (!rideId) {
+                res.status(400).json({ message: "Ride id is required" });
+                return;
+            }
+            const ride = await Ride.findById(rideId).populate<{ driver: IUser }>("driver", "driverProfile avatar first_name last_name email rating");
+
+
+            if (!ride) {
+                res.status(404).json({ message: "Ride not found" });
+                return;
+            }
+
+            const response = {
+                _id: ride._id,
+                status: ride.status,
+                pickup_location: ride.pickup_location,
+                dropoff_location: ride.dropoff_location,
+                fare: ride.fare,
+                amount_paid: ride.amount_paid,
+                rated: ride.rated,
+                requested_at: ride.requested_at,
+                driver: {
+                    _id: ride.driver._id,
+                    avatar: ride.driver.avatar,
+                    first_name: ride.driver.first_name,
+                    last_name: ride.driver.last_name,
+                    email: ride.driver.email,
+                    rating: ride.driver.rating,
+                },
+            }
+
+            res.status(200).json({ message: "Ride found", data: response });
         } catch (error) {
             console.log(error);
             res.status(500).json({ message: "Internal server error" });
