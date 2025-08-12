@@ -37,6 +37,7 @@ const UserSchema = new Schema<IUser>(
             avg: { type: Number, default: 0 },
         },
         address: [],
+        one_signal_id: { type: String, default: '' },
         payment_fine: { type: Number, default: 0 },
         createdAt: { type: Date, default: Date.now },
         updatedAt: { type: Date, default: Date.now },

@@ -3,6 +3,9 @@ import User from "../models/user_model";
 import Ride from "../models/ride_model";
 import { IUser } from "../types/user_type";
 import Rating from "../models/rating_model";
+import { io } from "../config/socket";
+import sendPushNotification from "../config/onesignal";
+
 
 export const userController = {
     uploadProfile: async (req: Request, res: Response) => {
@@ -593,7 +596,8 @@ export const userController = {
                 res.status(400).json({ message: "Invalid Request" });
                 return;
             }
-            const ride = await Ride.findById(rideId);
+            const ride = await Ride.findById(rideId).populate<{ driver: IUser }>("driver", "avatar first_name last_name");
+
             if (!ride) {
                 res.status(404).json({ message: "Ride not found" });
                 return;
@@ -610,6 +614,23 @@ export const userController = {
             ride.status = "accepted";
             await ride.save();
             res.status(200).json({ message: "Ride accepted" });
+
+            io.to(ride.rider.toString()).emit("tripStatus", {
+                message: "Driver has accepted your ride",
+                data: {
+                    ride: ride, driver: {
+                        avatar: ride.driver.avatar,
+                        first_name: ride.driver.first_name,
+                        last_name: ride.driver.last_name,
+                    },
+                },
+            });
+            const rider = await User.findById(ride.rider);
+            if (!rider) {
+                console.log("Rider-could-not-be-found");
+                return;
+            }
+            await sendPushNotification(rider.one_signal_id, "Your Ride Request has been accepted, check driver location");
         } catch (error) {
             console.error(error);
             res.status(500).json({ message: "Internal Server Error" });
@@ -619,10 +640,12 @@ export const userController = {
     declineRide: async (req: Request, res: Response) => {
         try {
             const { rideId } = req.body;
+
             if (!rideId) {
                 res.status(400).json({ message: "Invalid Request" });
                 return;
             }
+            const driver = res.locals.user;
             const ride = await Ride.findById(rideId);
             if (!ride) {
                 res.status(404).json({ message: "Ride not found" });
@@ -639,6 +662,25 @@ export const userController = {
             ride.status = "rejected";
             await ride.save();
             res.status(200).json({ message: "Ride declined" });
+
+            const rider = await User.findById(ride.rider);
+            if (!rider) {
+                console.log("Rider-could-not-be-found");
+                return;
+            }
+
+            io.to(ride.rider.toString()).emit("tripStatus", {
+                message: "Driver has cancelled the ride request",
+                data: {
+                    ride: ride, driver: {
+                        avatar: driver.avatar,
+                        first_name: driver.first_name,
+                        last_name: driver.last_name,
+                    },
+                },
+            });
+            await sendPushNotification(rider.one_signal_id, "Your Ride Request has been declined");
+
         } catch (error) {
             console.error(error);
             res.status(500).json({ message: "Internal server error" });
@@ -648,11 +690,13 @@ export const userController = {
     cancelRide: async (req: Request, res: Response) => {
         try {
             const { rideId } = req.body;
+            const user = res.locals.user;
             if (!rideId) {
                 res.status(400).json({ message: "Invalid Request" });
                 return;
             }
-            const ride = await Ride.findById(rideId);
+            const ride = await Ride.findById(rideId).populate<{ rider: IUser }>("rider").populate<{ driver: IUser }>("driver");
+
             if (!ride) {
                 res.status(404).json({ message: "Ride not found" });
                 return;
@@ -669,6 +713,19 @@ export const userController = {
             ride.status = "cancelled";
             await ride.save();
             res.status(200).json({ message: "Ride cancelled" });
+
+            io.to(ride.driver.toString()).emit("tripStatus", {
+                message: `The ${user.role} has cancelled the ride.`,
+                rideId: ride._id,
+            });
+
+            let notifyOtherPartyId: any;
+            if (ride.rider.toString() === user._id.toString()) {
+                notifyOtherPartyId = ride.driver.one_signal_id;
+            } else {
+                notifyOtherPartyId = ride.rider.one_signal_id;
+            }
+            await sendPushNotification(notifyOtherPartyId, "The passenger has cancelled the ride request.");
         } catch (error) {
             console.error(error);
             res.status(500).json({ message: "Internal server error" });
@@ -682,7 +739,7 @@ export const userController = {
                 res.status(400).json({ message: "Invalid Request" });
                 return;
             }
-            const ride = await Ride.findById(rideId);
+            const ride = await Ride.findById(rideId).populate<{ rider: IUser }>("rider");
             if (!ride) {
                 res.status(404).json({ message: "Ride not found" });
                 return;
@@ -713,6 +770,20 @@ export const userController = {
             await ride.save();
 
             res.status(200).json({ message: "Ride started" });
+
+            io.to(ride.rider.toString()).emit("tripStatus", {
+                message: "Driver has started the ride",
+                data: {
+                    ride: ride, driver: {
+                        avatar: driver.avatar,
+                        first_name: driver.first_name,
+                        last_name: driver.last_name,
+                    },
+                },
+            });
+
+            await sendPushNotification(ride.rider.one_signal_id, "Driver has started the ride");
+
         } catch (error) {
             console.error(error);
             res.status(500).json({ message: "Internal server error" });
@@ -726,7 +797,7 @@ export const userController = {
                 res.status(400).json({ message: "Invalid Request" });
                 return;
             }
-            const ride = await Ride.findById(rideId);
+            const ride = await Ride.findById(rideId).populate<{ rider: IUser }>("rider");
             if (!ride) {
                 res.status(404).json({ message: "Ride not found" });
                 return;
@@ -742,6 +813,12 @@ export const userController = {
             ride.status = "completed";
             await ride.save();
             res.status(200).json({ message: "Ride completed" });
+
+            io.to(ride.rider.toString()).emit("tripStatus", {
+                message: "Driver has completed the ride"
+            });
+
+            await sendPushNotification(ride.rider.one_signal_id, "Driver has completed the ride");
         } catch (error) {
             console.error(error);
             res.status(500).json({ message: "Internal server error" });

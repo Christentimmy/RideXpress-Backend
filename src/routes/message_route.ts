@@ -6,7 +6,6 @@ import { uploadMessageMedia } from "../middlewares/upload";
 const router = express.Router();
 
 
-
 router.use(tokenValidationMiddleware);
 router.use(statusChecker);
 

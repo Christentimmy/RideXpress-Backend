@@ -36,6 +36,7 @@ export interface IUser extends Document {
         total: number;
         avg: number;
     };
+    one_signal_id: string;
     payment_fine: number;
     createdAt: Date;
     updatedAt: Date;
