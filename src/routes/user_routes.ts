@@ -19,17 +19,17 @@ router.get("/get-user-details", userController.getUserDetails);
 router.use(statusChecker);
 
 router.post("/find-nearby-drivers", userController.findNearByDrivers);
+router.get("/get-all-ride-request", userController.getAllRideRequest);
 router.get("/get-current-ride", userController.getCurrentRide);
 router.post("/rate-driver", userController.rateDriver);
 router.get("/get-ride/:rideId", userController.getRideById);
-
-router.post("/edit-profile", uploadProfile.single("avatar"), userController.editProfile);
-router.get("/get-today-ride-summary", userController.getTodayRideSummary);
-router.get("/get-all-ride-request", userController.getAllRideRequest);
 router.post("/accept-ride", userController.acceptRide);
 router.post("/decline-ride", userController.declineRide);
 router.post("/cancel-ride", userController.cancelRide);
+router.post("/start-ride", userController.startRide);
 
+router.post("/edit-profile", uploadProfile.single("avatar"), userController.editProfile);
+router.get("/get-today-ride-summary", userController.getTodayRideSummary);
 
 router.patch("/upload-vehicle-docs", roleMiddleware("driver"), uploadMore.fields([
     { name: "driver_license", maxCount: 1 },

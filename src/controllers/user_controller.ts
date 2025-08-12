@@ -613,5 +613,46 @@ export const userController = {
         }
     },
 
+    startRide: async (req: Request, res: Response) => {
+        try {
+            const { rideId } = req.body;
+            if (!rideId) {
+                res.status(400).json({ message: "Invalid Request" });
+                return;
+            }
+            const ride = await Ride.findById(rideId);
+            if (!ride) {
+                res.status(404).json({ message: "Ride not found" });
+                return;
+            }
+            if (ride.status !== "accepted") {
+                res.status(400).json({ message: "Ride is not accepted" });
+                return;
+            }
+            if (ride.driver.toString() !== res.locals.user._id.toString()) {
+                res.status(400).json({ message: "You are not authorized to start this ride" });
+                return;
+            }
+            const driver = await User.findById(ride.driver);
+            if (!driver) {
+                res.status(404).json({ message: "Driver not found" });
+                return;
+            }
+            ride.status = "progress";
+            driver.availability_status = "on_trip";
+            driver.location = {
+                type: "Point",
+                coordinates: [ride.pickup_location.lng, ride.pickup_location.lat],
+            };
+            driver.save();
+            
+            await ride.save();
+            res.status(200).json({ message: "Ride started" });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Internal server error" });
+        }
+    },
+
 
 };
