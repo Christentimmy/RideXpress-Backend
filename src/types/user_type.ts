@@ -27,6 +27,9 @@ export interface IUser extends Document {
         documents: { name: string; url: string }[];
         isVerified: boolean;
         is_profile_completed: boolean;
+        city: string;
+        state: string;
+        country: string;
     };
     rating: {
         total: number;

@@ -26,6 +26,41 @@ export const userController = {
         }
     },
 
+    getUserDetails: async (req: Request, res: Response) => {
+        try {
+            const userId = res.locals.userId;
+            if (!userId) {
+                res.status(404).json({ message: "User not found" });
+                return;
+            }
+            const user = await User.findById(userId);
+            if (!user) {
+                res.status(404).json({ message: "User not found" });
+                return;
+            }
+
+            const userDetails = {
+                first_name: user.first_name,
+                last_name: user.last_name,
+                email: user.email,
+                phone: user.phone,
+                role: user.role,
+                account_status: user.account_status,
+                availability_status: user.availability_status,
+                is_email_verified: user.is_email_verified,
+                is_phone_verified: user.is_phone_verified,
+                avatar: user.avatar,
+                address: user.address,
+                driverProfile: user.driverProfile,
+            }
+
+            res.status(200).json({ message: "User-Details-Fetched", data: userDetails });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Internal server error" });
+        }
+    },
+
     getUserAddress: async (req: Request, res: Response) => {
         try {
             const userId = res.locals.userId;
@@ -325,7 +360,7 @@ export const userController = {
             const user: IUser = res.locals.user;
 
             const { first_name, last_name } = req.body;
-            
+
             if (first_name) {
                 user.first_name = first_name;
             }

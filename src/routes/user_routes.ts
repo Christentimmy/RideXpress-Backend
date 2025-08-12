@@ -8,9 +8,12 @@ const router = express.Router();
 
 router.use(tokenValidationMiddleware);
 
+
 router.post("/upload-profile", uploadProfile.single("avatar"), userController.uploadProfile);
 router.get("/get-address", userController.getUserAddress);
 router.post("/save-address", userController.saveAddress);
+router.get("/get-user-details", userController.getUserDetails);
+
 
 router.use(statusChecker);
 
@@ -20,5 +23,6 @@ router.post("/rate-driver", userController.rateDriver);
 router.get("/get-ride/:rideId", userController.getRideById);
 
 router.post("/edit-profile", uploadProfile.single("avatar"), userController.editProfile);
+
 
 export default router;
