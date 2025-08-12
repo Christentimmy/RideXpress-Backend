@@ -19,7 +19,7 @@ const UserSchema = new Schema<IUser>(
             coordinates: { type: [Number], default: [0, 0] },//lng,lat
         },
         driverProfile: {
-            carSeat: { type: Number, default: 0 },    
+            carSeat: { type: Number, default: 0 },
             carModel: { type: String, default: '' },
             carPlate: { type: String, default: '' },
             licenseNumber: { type: String, default: '' },
@@ -27,6 +27,10 @@ const UserSchema = new Schema<IUser>(
             documents: [{ name: { type: String, default: '' }, url: { type: String, default: '' } }],
             isVerified: { type: Boolean, default: false },
             is_profile_completed: { type: Boolean, default: false },
+            allTrips: { type: Number, default: 0 },
+            city: { type: String, default: '' },
+            state: { type: String, default: '' },
+            country: { type: String, default: '' },
         },
         rating: {
             total: { type: Number, default: 0 },

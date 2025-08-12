@@ -30,6 +30,7 @@ export interface IUser extends Document {
         city: string;
         state: string;
         country: string;
+        allTrips: number;
     };
     rating: {
         total: number;
