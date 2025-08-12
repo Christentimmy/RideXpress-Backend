@@ -2,6 +2,7 @@
 import mongoose, { Document } from "mongoose";
 
 export interface IRide extends Document {
+    _id: mongoose.Types.ObjectId;
     rider: mongoose.Types.ObjectId;
     driver: mongoose.Types.ObjectId;
     status: "pending" | "accepted" | "rejected" | "cancelled" | "completed" | "progress" | "paused" | "panic";
