@@ -489,4 +489,98 @@ export const userController = {
         }
 
     },
+
+    getAllRideRequest: async (req: Request, res: Response) => {
+        try {
+            const user = res.locals.user;
+            if (!user) {
+                res.status(404).json({ message: "User not found" });
+                return;
+            }
+
+            const rides = await Ride.find({
+                user: user._id,
+                status: "pending",
+            }).populate<{ rider: IUser }>("rider", "avatar first_name last_name rating");
+
+            const response = rides.map((ride) => ({
+                rideId: ride._id,
+                avatar: ride.rider.avatar,
+                first_name: ride.rider.first_name,
+                last_name: ride.rider.last_name,
+                rating: ride.rider.rating,
+                pickup_location: ride.pickup_location,
+                dropoff_location: ride.dropoff_location,
+                requested_at: ride.requested_at,
+            }));
+
+            res.status(200).json({
+                message: "All ride requests",
+                data: response,
+            });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Internal Server Error" });
+        }
+    },
+
+    acceptRide: async (req: Request, res: Response) => {
+        try {
+            const { rideId } = req.body;
+            if (!rideId) {
+                res.status(400).json({ message: "Invalid Request" });
+                return;
+            }
+            const ride = await Ride.findById(rideId);
+            if (!ride) {
+                res.status(404).json({ message: "Ride not found" });
+                return;
+            }
+            if (ride.status !== "pending") {
+                res.status(400).json({ message: "Ride is not pending" });
+                return;
+            }
+            if (ride.driver.toString() !== res.locals.user._id.toString()) {
+                res.status(400).json({ message: "You are not authorized to accept this ride" });
+                return;
+            }
+
+            ride.status = "accepted";
+            await ride.save();
+            res.status(200).json({ message: "Ride accepted" });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Internal Server Error" });
+        }
+    },
+
+    declineRide: async (req: Request, res: Response) => {
+        try {
+            const { rideId } = req.body;
+            if (!rideId) {
+                res.status(400).json({ message: "Invalid Request" });
+                return;
+            }
+            const ride = await Ride.findById(rideId);
+            if (!ride) {
+                res.status(404).json({ message: "Ride not found" });
+                return;
+            }
+            if (ride.status !== "pending") {
+                res.status(400).json({ message: "Ride is not pending" });
+                return;
+            }
+            if (ride.driver.toString() !== res.locals.user._id.toString()) {
+                res.status(400).json({ message: "You are not authorized to decline this ride" });
+                return;
+            }
+            ride.status = "rejected";
+            await ride.save();
+            res.status(200).json({ message: "Ride declined" });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Internal server error" });
+        }
+    },
+
 };
