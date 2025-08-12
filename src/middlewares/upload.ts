@@ -20,6 +20,20 @@ const uploadProfile = multer({
 });
 
 
-export { uploadProfile };
+const morestorage = new CloudinaryStorage({
+    cloudinary,
+    params: async (req, file) => ({
+        folder: "driver_documents",
+        format: "png",
+        public_id: file.originalname.split(".")[0],
+    }),
+});
+
+
+const uploadMore = multer({ storage: morestorage });
+
+
+export { uploadProfile, uploadMore };
+
 
 

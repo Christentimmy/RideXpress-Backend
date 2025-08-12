@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import User from "../models/user_model";
 import Ride from "../models/ride_model";
 import { IUser } from "../types/user_type";
+import cloudinary from "../config/cloudinary";
+
 
 export const userController = {
     uploadProfile: async (req: Request, res: Response) => {
@@ -384,5 +386,69 @@ export const userController = {
             res.status(500).json({ message: "Internal server error" });
         }
     },
+
+    registerVehicle: async (req: Request, res: Response) => {
+        try {
+            if (!req.body) {
+                res.status(400).json({ message: "Invalid Request" });
+                return;
+            }
+            const { vehicleRegNumber, carColor, vehicleModel, seat, licensePlate, vehicleYear } = req.body;
+            if (!vehicleRegNumber || !carColor || !vehicleModel || !seat || !licensePlate || !vehicleYear) {
+                res.status(400).json({ message: "Invalid Request" });
+                return;
+            }
+
+            const user = res.locals.user;
+            if (!user) {
+                res.status(400).json({ message: "User not found" });
+                return;
+            }
+
+            user.driverProfile.vehicleRegNumber = vehicleRegNumber;
+            user.driverProfile.carColor = carColor;
+            user.driverProfile.vehicleModel = vehicleModel;
+            user.driverProfile.seat = seat;
+            user.driverProfile.licensePlate = licensePlate;
+            user.driverProfile.vehicleYear = vehicleYear;
+
+            await user.save();
+
+            res.status(200).json({ message: "Vehicle-Registered" });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Internal server error" });
+        }
+    },
+
+    uploadVehicleDocs: async (req: Request, res: Response) => {
+        try {
+            if (!req.files) {
+                return res.status(400).json({ message: "All documents are required" });
+            }
+
+            const user = res.locals.user;
+            if (!user) {
+                return res.status(404).json({ message: "User not found" });
+            }
+
+            const uploadedDocs: { name: string; url: string }[] = [];
+
+            Object.entries(req.files).forEach(([key, files]) => {
+                (files as Express.Multer.File[]).forEach((file) => {
+                    uploadedDocs.push({ name: key, url: file.path });
+                });
+            });
+
+            user.driverProfile.documents.push(...uploadedDocs);
+            await user.save();
+
+            return res.status(200).json({ message: "Documents uploaded successfully" });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Internal Server Error" });
+        }
+    }
+
 
 };
