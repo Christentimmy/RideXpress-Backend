@@ -32,8 +32,25 @@ const morestorage = new CloudinaryStorage({
 
 const uploadMore = multer({ storage: morestorage });
 
+const messageMediaStorage = new CloudinaryStorage({
+    cloudinary,
+    params: async (req, file) => {
+        return {
+            folder: "message_media",
+            resource_type: "auto",
+            public_id: `${Date.now()}-${file.originalname.split(".")[0]}`,
+        };
+    },
+});
 
-export { uploadProfile, uploadMore };
+
+const uploadMessageMedia = multer({
+    storage: messageMediaStorage,
+    limits: { fileSize: 150 * 1024 * 1024 }
+});
+
+
+export { uploadProfile, uploadMore, uploadMessageMedia };
 
 
 
