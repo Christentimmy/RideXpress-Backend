@@ -18,7 +18,7 @@ export interface IUser extends Document {
         type: 'Point';
         coordinates: [number, number]; // [lng, lat]
     };
-    driverProfile?: {
+    driverProfile: {
         carSeat: number;
         carModel: string;
         carPlate: string;
@@ -26,6 +26,7 @@ export interface IUser extends Document {
         licenseExpiry: Date;
         documents: { name: string; url: string }[];
         isVerified: boolean;
+        is_profile_completed: boolean;
     };
     rating: {
         total: number;

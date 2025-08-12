@@ -26,10 +26,7 @@ const UserSchema = new Schema<IUser>(
             licenseExpiry: { type: Date, default: Date.now },
             documents: [{ name: { type: String, default: '' }, url: { type: String, default: '' } }],
             isVerified: { type: Boolean, default: false },
-            rating: {
-                total: { type: Number, default: 0 },
-                count: { type: Number, default: 0 },
-            },
+            is_profile_completed: { type: Boolean, default: false },
         },
         rating: {
             total: { type: Number, default: 0 },
