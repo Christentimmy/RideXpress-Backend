@@ -19,5 +19,6 @@ router.get("/get-current-ride", userController.getCurrentRide);
 router.post("/rate-driver", userController.rateDriver);
 router.get("/get-ride/:rideId", userController.getRideById);
 
+router.post("/edit-profile", uploadProfile.single("avatar"), userController.editProfile);
 
 export default router;

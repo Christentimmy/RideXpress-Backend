@@ -315,4 +315,39 @@ export const userController = {
         }
     },
 
+    editProfile: async (req: Request, res: Response) => {
+        try {
+            const userId = res.locals.userId;
+            if (!userId) {
+                res.status(400).json({ message: "User not authenticated" });
+                return;
+            }
+            const user: IUser = res.locals.user;
+
+            const { first_name, last_name } = req.body;
+            
+            if (first_name) {
+                user.first_name = first_name;
+            }
+            if (last_name) {
+                user.last_name = last_name;
+            }
+            if (req.file) {
+                user.avatar = req.file.path;
+            }
+
+            if (!first_name && !last_name && !req.file) {
+                res.status(400).json({ message: "At least one field is required" });
+                return;
+            }
+
+            await user.save();
+            res.status(200).json({ message: "Profile updated successfully" });
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Internal server error" });
+        }
+    },
+
 };
