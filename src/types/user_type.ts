@@ -31,6 +31,7 @@ export interface IUser extends Document {
         total: number;
         avg: number;
     };
+    payment_fine: number;
     createdAt: Date;
     updatedAt: Date;
 }

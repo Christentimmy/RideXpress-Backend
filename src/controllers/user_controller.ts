@@ -70,6 +70,11 @@ export const userController = {
                 res.status(400).json({ message: "All fields are required" });
                 return;
             }
+            const user = res.locals.user;
+            if (user.payment_fine > 0) {
+                res.status(400).json({ message: "You have a payment fine" });
+                return;
+            }
 
             let currentRide = await Ride.findOne({
                 rider: res.locals.userId,
@@ -223,8 +228,6 @@ export const userController = {
                 $set: { "rating.avg": Number(updatedAvg.toFixed(1)) },
                 $inc: { "rating.total": 1 }
             });
-
-            
 
             res.status(200).json({ message: "Driver rated successfully" });
         } catch (error) {
