@@ -24,13 +24,14 @@ router.post("/rate-driver", userController.rateDriver);
 router.get("/get-ride/:rideId", userController.getRideById);
 
 router.post("/edit-profile", uploadProfile.single("avatar"), userController.editProfile);
+router.get("/get-today-ride-summary", userController.getTodayRideSummary);
 
 
 router.patch("/upload-vehicle-docs", roleMiddleware("driver"), uploadMore.fields([
-    { name: "vehicle_registration", maxCount: 1 },
-    { name: "insurance_policy", maxCount: 1 },
-    { name: "owner_certificate", maxCount: 1 },
-    { name: "puc", maxCount: 1 },
+    { name: "driver_license", maxCount: 1 },
+    { name: "vehicle_license", maxCount: 1 },
+    { name: "vehicle_insurance", maxCount: 1 },
+    { name: "mot_certificate", maxCount: 1 },
 ]), userController.uploadVehicleDocs);
 
 

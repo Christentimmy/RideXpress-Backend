@@ -2,8 +2,6 @@ import { Request, Response } from "express";
 import User from "../models/user_model";
 import Ride from "../models/ride_model";
 import { IUser } from "../types/user_type";
-import cloudinary from "../config/cloudinary";
-
 
 export const userController = {
     uploadProfile: async (req: Request, res: Response) => {
@@ -448,7 +446,47 @@ export const userController = {
             console.error(error);
             res.status(500).json({ message: "Internal Server Error" });
         }
-    }
+    },
 
+    getTodayRideSummary: async (req: Request, res: Response) => {
+        try {
+            const user = res.locals.user;
+            if (!user) {
+                res.status(404).json({ message: "User not found" });
+                return;
+            }
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const rides = await Ride.find({
+                user: user._id,
+                status: "completed",
+                requested_at: {
+                    $gte: today,
+                    $lt: tomorrow,
+                },
+            });
 
+            let totalEarnings = 0;
+            let totalRides = 0;
+            rides.forEach((ride) => {
+                totalEarnings += ride.fare;
+                totalRides++;
+            });
+
+            res.status(200).json({
+                message: "Today's ride summary",
+                data: {
+                    totalEarnings,
+                    totalRides,
+                }
+            })
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ message: "Internal Server Error" });
+        }
+
+    },
 };
