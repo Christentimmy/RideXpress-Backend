@@ -11,7 +11,7 @@ if (!token_secret) {
 
 function generateToken(user: IUser) {
     const token = jwt.sign({ id: user._id, role: user.role }, token_secret, {
-        expiresIn: token_expires_in,
+        expiresIn: "2d",
     });
     return token;
 }

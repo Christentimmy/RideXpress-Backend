@@ -14,6 +14,8 @@ router.post("/upload-profile", uploadProfile.single("avatar"), userController.up
 router.get("/get-address", userController.getUserAddress);
 router.post("/save-address", userController.saveAddress);
 router.get("/get-user-details", userController.getUserDetails);
+router.post("/update-location", userController.updateLocation);
+router.post("/save-signal-id/:id", userController.saveSignalId);
 
 
 router.use(statusChecker);

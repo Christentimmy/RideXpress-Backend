@@ -1,12 +1,10 @@
 import jwt, { JwtPayload, TokenExpiredError } from "jsonwebtoken";
-import dotenv from "dotenv";
 import { Request, Response, NextFunction } from "express";
 import tokenBlacklistSchema from "../models/token_blacklist_model";
 import mongoose from "mongoose";
+import config from "../config/config";
+const token_secret = config.jwt.secret;
 
-dotenv.config();
-
-const token_secret = process.env.TOKEN_SECRET;
 const isValidObjectId = mongoose.Types.ObjectId.isValid;
 if (!token_secret) {
     throw new Error("TOKEN_SECRET is not defined in the environment variables.");

@@ -20,8 +20,13 @@ export async function statusChecker(req: Request, res: Response, next: NextFunct
             res.status(404).json({ message: "User not found" });
             return;
         }
-        if (!user?.is_email_verified) {
+        if (!user?.isEmailVerified) {
             res.status(400).send({ message: "user email is not verified" });
+            return;
+        }
+        
+        if(user.role === "driver" && !user.driverProfile.isProfileCompleted){
+            res.status(400).send({ message: "user driver profile is not completed" });
             return;
         }
 

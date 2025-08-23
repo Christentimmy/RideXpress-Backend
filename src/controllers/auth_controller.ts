@@ -41,7 +41,7 @@ export const authController = {
                 password: hashedPassword,
             });
 
-            const otp = Math.floor(100000 + Math.random() * 900000).toString();
+            const otp = Math.floor(1000 + Math.random() * 9000).toString().padStart(4, '0');
             const success = await sendOTP(user.email, otp);
             if (!success) {
                 res.status(500).json({ message: "Failed to send OTP" });
@@ -87,7 +87,7 @@ export const authController = {
                 }
             });
 
-            const otp = Math.floor(100000 + Math.random() * 900000).toString();
+            const otp = Math.floor(1000 + Math.random() * 9000).toString();
             const success = await sendOTP(user.email, otp);
             if (!success) {
                 res.status(500).json({ message: "Failed to send OTP" });
@@ -128,13 +128,13 @@ export const authController = {
                 return;
             }
             const token = generateToken(user);
-            if (!user.is_phone_verified && !user.is_email_verified) {
+            if (!user.isPhoneVerified && !user.isEmailVerified) {
                 res.status(400).json({ message: "Please verify your phone number or email", token });
                 return;
             }
 
             if (user.role == "driver") {
-                if (!user.driverProfile.is_profile_completed) {
+                if (!user.driverProfile.isProfileCompleted) {
                     res.status(400).json({ message: "Please complete your driver profile", token });
                     return;
                 }
@@ -160,33 +160,12 @@ export const authController = {
 
     sendOTp: async (req: Request, res: Response) => {
         try {
-            const authHeader = req.header("Authorization");
-
-            if (!authHeader || !authHeader.startsWith("Bearer ")) {
-                res.status(401).json({
-                    message: "Access denied. No token provided or incorrect format.",
-                });
+            const { email } = req.body;
+            if (!email) {
+                res.status(400).json({ message: "Email field is required" });
                 return;
             }
-
-            const token = authHeader.split(" ")[1];
-
-            if (!token || token.split(".").length !== 3) {
-                res.status(400).json({ message: "Invalid token format." });
-                return;
-            }
-
-            let decoded: DecodedToken;
-            try {
-                decoded = jwt.verify(token, config.jwt.secret) as DecodedToken;
-
-            } catch (error) {
-                console.error("JWT Verification Error:", error);
-                res.status(403).json({ message: "Invalid or expired token." });
-                return;
-            }
-
-            const user = await User.findById(decoded.id);
+            const user = await User.findOne({ email });
             if (!user) {
                 res.status(404).json({ message: "User Not Found" });
                 return;
@@ -224,7 +203,7 @@ export const authController = {
                 return;
             }
 
-            const user = await User.findById(res.locals.userId);
+            const user = await User.findOne({ email });
             if (!user) {
                 res.status(404).json({ message: "User Not Found" });
                 return;
@@ -247,17 +226,12 @@ export const authController = {
             }
 
             if (email) {
-                user.is_email_verified = true;
+                user.isEmailVerified = true;
             }
-
-            // if (phone_number && phone_number !== user.phone_number) {
-            //     res.status(400).json({ message: "Invalid phone number" });
-            //     return;
-            // }
 
             if (phone_number) {
                 user.phone = phone_number;
-                user.is_phone_verified = true;
+                user.isPhoneVerified = true;
             }
 
             await user.save();
