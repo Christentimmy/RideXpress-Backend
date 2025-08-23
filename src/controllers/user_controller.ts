@@ -237,6 +237,10 @@ export const userController = {
         });
       }
 
+      io.to(closestDriver._id.toString()).emit("ride-found", {
+        ride: currentRide,
+      });
+
       res.status(200).json({
         message: "Driver found",
         data: {
