@@ -84,18 +84,17 @@ export const userController = {
   saveAddress: async (req: Request, res: Response) => {
     try {
       const { address } = req.body;
-      console.log(`Address: ${address}`);
 
-      if (!Array.isArray(address) || address.length === 0) {
+      if (!address) {
         return res
           .status(400)
           .json({ message: "At least one address is required" });
       }
 
       for (const addr of address) {
-        if (!addr.name || !addr.address) {
+        if (!addr.type || !addr.address) {
           return res.status(400).json({
-            message: "Each address must include name, address, and coordinates",
+            message: "Each address must include type, address, and coordinates",
           });
         }
       }
@@ -107,18 +106,18 @@ export const userController = {
       }
 
       const alreadySaved = user.address.map((addr) => ({
-        name: addr.name.trim().toLowerCase(),
+        type: addr.type.trim().toLowerCase(),
         address: addr.address.trim().toLowerCase(),
       }));
 
-      const duplicate = address.find((addr) => {
+      const duplicate = address.find((addr: { type: string; address: string; }) => {
         const normalized = {
-          name: addr.name.trim().toLowerCase(),
+          type: addr.type.trim().toLowerCase(),
           address: addr.address.trim().toLowerCase(),
         };
         return alreadySaved.some(
           (saved) =>
-            saved.name === normalized.name ||
+            saved.type === normalized.type ||
             saved.address === normalized.address
         );
       });
@@ -136,7 +135,7 @@ export const userController = {
               .status(400)
               .json({ message: "Invalid address provided: " + addr.address });
           }
-          addr.coordinates = coords;
+          addr.coordinates = [coords.lng, coords.lat];
         }
       }
 

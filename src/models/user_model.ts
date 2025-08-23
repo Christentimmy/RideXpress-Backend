@@ -50,7 +50,7 @@ const UserSchema = new Schema<IUser>({
   },
   address: [
     {
-      name: { type: String, default: "" },
+      type: { type: String, default: "" },
       address: { type: String, default: "" },
       coordinates: { type: [Number], default: [0, 0] }, //lng,lat
     },

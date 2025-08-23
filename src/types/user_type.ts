@@ -14,7 +14,7 @@ export interface IUser extends Document {
   isPhoneVerified: boolean;
   avatar?: string;
   address: {
-    name: string;
+    type: string;
     address: string;
     coordinates: [number, number]; // [lng, lat]
   }[];
