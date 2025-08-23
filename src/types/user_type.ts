@@ -23,8 +23,12 @@ export interface IUser extends Document {
     coordinates: [number, number]; // [lng, lat]
   };
   driverProfile: {
+    vehicleRegNumber: string;
+    vehicleYear: string;
+    wheelChairAccessible: boolean;
     carSeat: number;
     carModel: string;
+    carColor: string;
     carPlate: string;
     licenseNumber: string;
     licenseExpiry: Date;

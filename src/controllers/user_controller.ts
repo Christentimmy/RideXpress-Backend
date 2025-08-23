@@ -74,7 +74,7 @@ export const userController = {
         res.status(404).json({ message: "User not found" });
         return;
       }
-      res.status(200).json({ address: user.address });
+      res.status(200).json({ data: user.address });
     } catch (error) {
       console.log(error);
       res.status(500).json({ message: "Internal server error" });
@@ -110,17 +110,19 @@ export const userController = {
         address: addr.address.trim().toLowerCase(),
       }));
 
-      const duplicate = address.find((addr: { type: string; address: string; }) => {
-        const normalized = {
-          type: addr.type.trim().toLowerCase(),
-          address: addr.address.trim().toLowerCase(),
-        };
-        return alreadySaved.some(
-          (saved) =>
-            saved.type === normalized.type ||
-            saved.address === normalized.address
-        );
-      });
+      const duplicate = address.find(
+        (addr: { type: string; address: string }) => {
+          const normalized = {
+            type: addr.type.trim().toLowerCase(),
+            address: addr.address.trim().toLowerCase(),
+          };
+          return alreadySaved.some(
+            (saved) =>
+              saved.type === normalized.type ||
+              saved.address === normalized.address
+          );
+        }
+      );
 
       if (duplicate) {
         return res.status(409).json({ message: "Duplicate address detected" });
@@ -151,10 +153,28 @@ export const userController = {
 
   findNearByDrivers: async (req: Request, res: Response) => {
     try {
-      const { carType, carSeat, fromLocation } = req.body;
+      const { carType, carSeat, pickupLocation, dropoffLocation } = req.body;
 
-      if (!carType || !carSeat || !fromLocation) {
+      if (!carType || !carSeat || !pickupLocation || !dropoffLocation) {
         res.status(400).json({ message: "All fields are required" });
+        return;
+      }
+
+      if (
+        !pickupLocation.lat ||
+        !pickupLocation.lng ||
+        !pickupLocation.address
+      ) {
+        res.status(400).json({ message: "Invalid pickup location" });
+        return;
+      }
+
+      if (
+        !dropoffLocation.lat ||
+        !dropoffLocation.lng ||
+        !dropoffLocation.address
+      ) {
+        res.status(400).json({ message: "Invalid dropoff location" });
         return;
       }
       const user = res.locals.user;
@@ -181,7 +201,7 @@ export const userController = {
           $near: {
             $geometry: {
               type: "Point",
-              coordinates: fromLocation,
+              coordinates: pickupLocation,
             },
             $maxDistance: 10000, // 10 km
           },
@@ -200,8 +220,8 @@ export const userController = {
           rider: res.locals.userId,
           driver: closestDriver._id,
           status: "pending",
-          pickup_location: fromLocation,
-          dropoff_location: fromLocation,
+          pickup_location: pickupLocation,
+          dropoff_location: dropoffLocation,
           fare: 0,
           requested_at: new Date(),
           payment_status: "pending",
@@ -486,6 +506,7 @@ export const userController = {
         res.status(400).json({ message: "Invalid Request" });
         return;
       }
+
       const {
         vehicleRegNumber,
         carColor,
@@ -493,7 +514,9 @@ export const userController = {
         seat,
         licensePlate,
         vehicleYear,
+        wheelChairAccessible = false,
       } = req.body;
+
       if (
         !vehicleRegNumber ||
         !carColor ||
@@ -506,7 +529,13 @@ export const userController = {
         return;
       }
 
-      const user = res.locals.user;
+      const userId = res.locals.userId;
+      if (!userId) {
+        res.status(400).json({ message: "User not found" });
+        return;
+      }
+
+      const user = await User.findById(userId);
       if (!user) {
         res.status(400).json({ message: "User not found" });
         return;
@@ -514,10 +543,11 @@ export const userController = {
 
       user.driverProfile.vehicleRegNumber = vehicleRegNumber;
       user.driverProfile.carColor = carColor;
-      user.driverProfile.vehicleModel = vehicleModel;
-      user.driverProfile.seat = seat;
-      user.driverProfile.licensePlate = licensePlate;
+      user.driverProfile.carModel = vehicleModel;
+      user.driverProfile.carSeat = seat;
+      user.driverProfile.carPlate = licensePlate;
       user.driverProfile.vehicleYear = vehicleYear;
+      user.driverProfile.wheelChairAccessible = wheelChairAccessible;
 
       await user.save();
 
@@ -534,7 +564,12 @@ export const userController = {
         return res.status(400).json({ message: "All documents are required" });
       }
 
-      const user = res.locals.user;
+      const userId = res.locals.userId;
+      if (!userId) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const user = await User.findById(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -548,6 +583,10 @@ export const userController = {
       });
 
       user.driverProfile.documents.push(...uploadedDocs);
+      user.driverProfile.isProfileCompleted = true;
+
+      //TODO: To be removed once admin panel is created
+      user.driverProfile.isVerified = true;
       await user.save();
 
       return res
@@ -1038,6 +1077,28 @@ export const userController = {
       user.one_signal_id = id;
       await user.save();
       res.status(200).json({ message: "Signal ID saved successfully" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  },
+
+  updateavailabilityStatus: async (req: Request, res: Response  ) => {
+    try {
+      const user = res.locals.user;
+      if (!user) {
+        res.status(400).json({ message: "User not found" });
+        return;
+      }
+      const { status } = req.body;
+      if (!status) {
+        res.status(400).json({ message: "Invalid Request" });
+        return;
+      }
+
+      user.availability_status = status;
+      await user.save();
+      res.status(200).json({ message: "Availability status updated successfully" });
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: "Internal server error" });

@@ -17,7 +17,7 @@ const UserSchema = new Schema<IUser>({
   isEmailVerified: { type: Boolean, default: false },
   isPhoneVerified: { type: Boolean, default: false },
   email: { type: String, unique: true, sparse: true, lowercase: true },
-  phone: { type: String, unique: true },
+  phone: { type: String },
   password: { type: String, required: true },
   role: { type: String, enum: ["rider", "driver", "admin"], default: "rider" },
   avatar: { type: String },
@@ -26,6 +26,10 @@ const UserSchema = new Schema<IUser>({
     coordinates: { type: [Number], default: [0, 0] }, //lng,lat
   },
   driverProfile: {
+    vehicleRegNumber: { type: String, default: "" },
+    vehicleYear: { type: String, default: "" },
+    carColor: { type: String, default: "" },
+    wheelChairAccessible: { type: Boolean, default: false },
     carSeat: { type: Number, default: 0 },
     carModel: { type: String, default: "" },
     carPlate: { type: String, default: "" },
