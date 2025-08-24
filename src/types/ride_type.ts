@@ -5,7 +5,7 @@ export interface IRide extends Document {
     _id: mongoose.Types.ObjectId;
     rider: mongoose.Types.ObjectId;
     driver: mongoose.Types.ObjectId;
-    status: "pending" | "accepted" | "rejected" | "cancelled" | "completed" | "progress" | "paused" | "panic";
+    status: "pending" | "arrived" | "accepted" | "rejected" | "cancelled" | "completed" | "progress" | "paused" | "panic";
     pickup_location: { lat: number; lng: number; address: string };
     dropoff_location: { lat: number; lng: number; address: string };
     fare: number;
@@ -17,4 +17,5 @@ export interface IRide extends Document {
     excluded_drivers?: mongoose.Types.ObjectId[];
     rated_by_rider: boolean;
     rated_by_driver: boolean;
+    stops?: { lat: number; lng: number; address: string }[];
 }

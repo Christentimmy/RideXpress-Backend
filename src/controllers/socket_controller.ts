@@ -5,7 +5,7 @@ import Ride from "../models/ride_model";
 export const socketController = {
 
     updateLocation: (io: Server, socket: Socket) => {
-        socket.on("updateLocation", async (data: { lat: number; lng: number }) => {
+        socket.on("updateLocation", async (data: { lat: number; lng: number; address: string }) => {
 
             try {
                 // Validate data
@@ -14,7 +14,7 @@ export const socketController = {
                     return;
                 }
 
-                const { lat, lng } = data;
+                const { lat, lng, address } = data;
 
                 if (
                     lat === undefined ||
@@ -51,7 +51,7 @@ export const socketController = {
                 }
 
                 // Update driver location in the database
-                driver.location = { type: "Point", coordinates: [lng, lat] };
+                driver.location = { type: "Point", address: address, coordinates: [lng, lat] };
                 await driver.save();
 
                 // Find active ride for this driver

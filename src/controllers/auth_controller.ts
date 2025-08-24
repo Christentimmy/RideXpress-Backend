@@ -4,16 +4,11 @@ import bcrypt from "bcrypt";
 import generateToken from "../utils/token_generator";
 import { sendOTP } from "../services/email_service";
 import { redisController } from "./redis_controller";
-import jwt, { JwtPayload } from "jsonwebtoken";
-import config from "../config/config";
+
 import bcryptjs from "bcryptjs";
 
-interface DecodedToken extends JwtPayload {
-  id: string;
-  role: string;
-}
-
 export const authController = {
+
   register: async (req: Request, res: Response) => {
     try {
       if (!req.body) {
@@ -43,15 +38,17 @@ export const authController = {
       const otp = Math.floor(1000 + Math.random() * 9000)
         .toString()
         .padStart(4, "0");
+
+      const token = generateToken(user);
+      await user.save();
+
       const success = await sendOTP(user.email, otp);
       if (!success) {
         res.status(500).json({ message: "Failed to send OTP" });
         return;
       }
-      await redisController.saveOtpToStore(user.email, otp);
 
-      const token = generateToken(user);
-      await user.save();
+      await redisController.saveOtpToStore(user.email, otp);
       res.status(201).json({ message: "User registered successfully", token });
     } catch (error) {
       console.error(`AuthController:register: ${error}`);
@@ -145,13 +142,11 @@ export const authController = {
 
       if (user.role == "driver") {
         if (!user.driverProfile.isProfileCompleted) {
-          res
-            .status(405)
-            .json({
-              message: "Please complete your driver profile",
-              token,
-              driverProfile: user.driverProfile,
-            });
+          res.status(405).json({
+            message: "Please complete your driver profile",
+            token,
+            driverProfile: user.driverProfile,
+          });
           return;
         }
       }
@@ -332,4 +327,5 @@ export const authController = {
       res.status(500).json({ message: "Internal Server Error" });
     }
   },
+  
 };

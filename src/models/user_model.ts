@@ -23,6 +23,7 @@ const UserSchema = new Schema<IUser>({
   avatar: { type: String },
   location: {
     type: { type: String, enum: ["Point"], default: "Point" },
+    address: { type: String, default: "" },
     coordinates: { type: [Number], default: [0, 0] }, //lng,lat
   },
   driverProfile: {

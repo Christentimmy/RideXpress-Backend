@@ -20,6 +20,7 @@ export interface IUser extends Document {
   }[];
   location?: {
     type: "Point";
+    address: string;
     coordinates: [number, number]; // [lng, lat]
   };
   driverProfile: {

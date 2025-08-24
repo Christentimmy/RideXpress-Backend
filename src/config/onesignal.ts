@@ -25,7 +25,6 @@ const sendPushNotification = async (oneSignalId: string, message: string) => {
         },
       }
     );
-    console.log('Notification sent:', response.data);
   } catch (error: any) {
     console.error('Error sending notification:', error.response?.data || error.message);
   }

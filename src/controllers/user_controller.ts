@@ -6,6 +6,7 @@ import Rating from "../models/rating_model";
 import { io } from "../config/socket";
 import sendPushNotification from "../config/onesignal";
 import getCoordinatesFromAddress from "../utils/get_coordinates_from_address";
+import { getETAFromLocationIQ } from "../utils/get_eta_from_coordinates";
 
 export const userController = {
   uploadProfile: async (req: Request, res: Response) => {
@@ -43,6 +44,7 @@ export const userController = {
       }
 
       const userDetails = {
+        _id: user._id,
         first_name: user.first_name,
         last_name: user.last_name,
         email: user.email,
@@ -54,7 +56,10 @@ export const userController = {
         isPhoneVerified: user.isPhoneVerified,
         avatar: user.avatar,
         address: user.address,
-        driverProfile: user.driverProfile,
+        driverProfile: {
+          ...user.driverProfile,
+          documents: undefined,
+        },
       };
 
       res
@@ -153,29 +158,47 @@ export const userController = {
 
   findNearByDrivers: async (req: Request, res: Response) => {
     try {
-      const { carType, carSeat, pickupLocation, dropoffLocation } = req.body;
+      const {
+        carSeat,
+        pickupLocation,
+        dropoffLocation,
+        wheelChairAccessible,
+        stops,
+      } = req.body;
 
-      if (!carType || !carSeat || !pickupLocation || !dropoffLocation) {
+      if (
+        !carSeat ||
+        !pickupLocation ||
+        !dropoffLocation ||
+        wheelChairAccessible === undefined
+      ) {
         res.status(400).json({ message: "All fields are required" });
         return;
       }
 
       if (
-        !pickupLocation.lat ||
-        !pickupLocation.lng ||
+        typeof pickupLocation.lat !== "number" ||
+        typeof pickupLocation.lng !== "number" ||
         !pickupLocation.address
       ) {
-        res.status(400).json({ message: "Invalid pickup location" });
-        return;
+        return res.status(400).json({ message: "Invalid pickup location" });
       }
 
       if (
-        !dropoffLocation.lat ||
-        !dropoffLocation.lng ||
-        !dropoffLocation.address
+        typeof dropoffLocation.lat !== "number" ||
+        typeof dropoffLocation.lng !== "number" ||
+        !pickupLocation.address
       ) {
-        res.status(400).json({ message: "Invalid dropoff location" });
-        return;
+        return res.status(400).json({ message: "Invalid dropoff location" });
+      }
+
+      if (stops) {
+        for (const stop of stops) {
+          if (!stop.lat || !stop.lng || !stop.address) {
+            res.status(400).json({ message: "Invalid stops" });
+            return;
+          }
+        }
       }
       const user = res.locals.user;
       if (user.payment_fine > 0) {
@@ -195,20 +218,21 @@ export const userController = {
         role: "driver",
         account_status: "active",
         availability_status: "online",
-        "driverProfile.carType": carType,
+        "driverProfile.wheelChairAccessible": wheelChairAccessible,
+        // "driverProfile.carType": carType,
         "driverProfile.carSeat": { $gte: carSeat },
         location: {
           $near: {
             $geometry: {
               type: "Point",
-              coordinates: pickupLocation,
+              coordinates: [pickupLocation.lng, pickupLocation.lat],
             },
             $maxDistance: 10000, // 10 km
           },
         },
-      })
-        .select("driverProfile avatar first_name last_name email rating ")
-        .lean();
+      }).select(
+        "driverProfile avatar first_name last_name email rating location"
+      );
 
       if (!closestDriver) {
         res.status(404).json({ message: "No driver found" });
@@ -241,11 +265,25 @@ export const userController = {
         ride: currentRide,
       });
 
+      closestDriver.availability_status = "on_trip";
+      await closestDriver.save();
+
+      const etaData = await getETAFromLocationIQ(
+        closestDriver!.location!.coordinates as [number, number],
+        pickupLocation
+      );
+
       res.status(200).json({
         message: "Driver found",
         data: {
           driver: closestDriver,
           ride: currentRide,
+          eta: etaData
+            ? {
+                minutes: Math.ceil(etaData.duration / 60),
+                distance_km: (etaData.distance / 1000).toFixed(2),
+              }
+            : null,
         },
       });
     } catch (error) {
@@ -257,12 +295,14 @@ export const userController = {
   getCurrentRide: async (req: Request, res: Response) => {
     try {
       const userId = res.locals.userId;
+      const role = res.locals.role;
       if (!userId) {
         res.status(400).json({ message: "User not authenticated" });
         return;
       }
+      const roleKey = role === "rider" ? "rider" : "driver";
       const ride = await Ride.findOne({
-        rider: userId,
+        [roleKey]: userId,
         $or: [
           {
             status: {
@@ -292,14 +332,14 @@ export const userController = {
 
   rateTrip: async (req: Request, res: Response) => {
     try {
-      const { driverId, rating, comment } = req.body;
+      const { rating, comment, rideId } = req.body;
       const user = res.locals.user;
 
       if (!user) {
         return res.status(400).json({ message: "User not authenticated" });
       }
 
-      if (!driverId || !rating) {
+      if (!rideId || !rating) {
         return res.status(400).json({ message: "All fields are required" });
       }
 
@@ -309,13 +349,7 @@ export const userController = {
           .json({ message: "Rating must be between 1 and 5" });
       }
 
-      // Find the completed & paid ride that involves both parties
-      const ride = await Ride.findOne({
-        rider: user.role === "rider" ? user._id : driverId,
-        driver: user.role === "driver" ? user._id : driverId,
-        status: "completed",
-        payment_status: "paid",
-      });
+      const ride = await Ride.findById(rideId);
 
       if (!ride) {
         return res.status(400).json({ message: "Ride not found" });
@@ -342,7 +376,7 @@ export const userController = {
       await ride.save();
 
       // Figure out who is being rated
-      const personToRateId = user.role === "rider" ? driverId : ride.rider;
+      const personToRateId = user.role === "rider" ? ride.driver : ride.rider;
 
       const personToRate = await User.findById(personToRateId)
         .select("rating")
@@ -363,8 +397,8 @@ export const userController = {
       });
 
       const rateModel = new Rating({
-        user: user.role === "rider" ? user._id : driverId,
-        driver: user.role === "driver" ? user._id : driverId,
+        user: user.role === "rider" ? user._id : ride.driver,
+        driver: user.role === "driver" ? user._id : ride.rider,
         rating,
         comment,
       });
@@ -724,14 +758,16 @@ export const userController = {
 
   acceptRide: async (req: Request, res: Response) => {
     try {
+      if (!req.body) {
+        res.status(400).json({ message: "Invalid Request" });
+      }
       const { rideId } = req.body;
       if (!rideId) {
         res.status(400).json({ message: "Invalid Request" });
         return;
       }
-      const ride = await Ride.findById(rideId).populate<{ driver: IUser }>(
-        "driver",
-        "avatar first_name last_name"
+      const ride = await Ride.findById(rideId).populate<{ rider: IUser }>(
+        "rider"
       );
 
       if (!ride) {
@@ -742,6 +778,7 @@ export const userController = {
         res.status(400).json({ message: "Ride is not pending" });
         return;
       }
+
       if (ride.driver.toString() !== res.locals.user._id.toString()) {
         res
           .status(400)
@@ -753,26 +790,80 @@ export const userController = {
       await ride.save();
       res.status(200).json({ message: "Ride accepted" });
 
-      io.to(ride.rider.toString()).emit("tripStatus", {
+      const rideObj: any = ride.toObject();
+
+      // Replace populated fields with just their IDs
+      rideObj.rider = ride.rider._id;
+
+      io.to(ride.rider._id.toString()).emit("tripStatus", {
         message: "Driver has accepted your ride",
         data: {
-          ride: ride,
-          driver: {
-            avatar: ride.driver.avatar,
-            first_name: ride.driver.first_name,
-            last_name: ride.driver.last_name,
-          },
+          ride: rideObj,
+          // driver: res.locals.user,
+          status: ride.status,
         },
       });
-      const rider = await User.findById(ride.rider);
-      if (!rider) {
-        console.log("Rider-could-not-be-found");
+      if (ride.rider.one_signal_id != null) {
+        await sendPushNotification(
+          ride.rider.one_signal_id,
+          "Your Ride Request has been accepted, check driver location"
+        );
+      }
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  },
+
+  arrivedAtPickUpLocation: async (req: Request, res: Response) => {
+    try {
+      const { rideId } = req.body;
+      if (!rideId) {
+        res.status(400).json({ message: "Invalid Request" });
         return;
       }
-      await sendPushNotification(
-        rider.one_signal_id,
-        "Your Ride Request has been accepted, check driver location"
+      const ride = await Ride.findById(rideId).populate<{ rider: IUser }>(
+        "rider"
       );
+      if (!ride) {
+        res.status(404).json({ message: "Ride not found" });
+        return;
+      }
+      if (ride.status !== "accepted") {
+        res.status(400).json({ message: "Ride is not accepted" });
+        return;
+      }
+      if (ride.driver.toString() !== res.locals.user._id.toString()) {
+        res
+          .status(400)
+          .json({
+            message: "You are not authorized to arrive at pick up location",
+          });
+        return;
+      }
+      ride.status = "arrived";
+      await ride.save();
+
+      const rideObj: any = ride.toObject();
+
+      // Replace populated fields with just their IDs
+      rideObj.rider = ride.rider._id;
+
+      io.to(ride.rider._id.toString()).emit("tripStatus", {
+        message: "Driver has arrived at pick up location",
+        data: {
+          ride: rideObj,
+          // driver: res.locals.user,
+          status: ride.status,
+        },
+      });
+      if (ride.rider.one_signal_id != null) {
+        await sendPushNotification(
+          ride.rider.one_signal_id,
+          "Your Ride Request has been accepted, check driver location"
+        );
+      }
+      res.status(200).json({ message: "Arrived at pick up location" });
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: "Internal Server Error" });
@@ -903,7 +994,7 @@ export const userController = {
         res.status(404).json({ message: "Ride not found" });
         return;
       }
-      if (ride.status !== "accepted") {
+      if (ride.status !== "arrived") {
         res.status(400).json({ message: "Ride is not accepted" });
         return;
       }
@@ -922,6 +1013,7 @@ export const userController = {
       driver.availability_status = "on_trip";
       driver.location = {
         type: "Point",
+        address: ride.pickup_location.address,
         coordinates: [ride.pickup_location.lng, ride.pickup_location.lat],
       };
 
@@ -932,10 +1024,11 @@ export const userController = {
 
       res.status(200).json({ message: "Ride started" });
 
-      io.to(ride.rider.toString()).emit("tripStatus", {
+      io.to(ride.rider._id.toString()).emit("tripStatus", {
         message: "Driver has started the ride",
         data: {
           ride: ride,
+          status: ride.status,
           driver: {
             avatar: driver.avatar,
             first_name: driver.first_name,
@@ -982,8 +1075,15 @@ export const userController = {
       await ride.save();
       res.status(200).json({ message: "Ride completed" });
 
-      io.to(ride.rider.toString()).emit("tripStatus", {
+      const rideObj: any = ride.toObject();
+      rideObj.rider = ride.rider._id;
+
+      io.to(ride.rider._id.toString()).emit("tripStatus", {
         message: "Driver has completed the ride",
+        data: {
+          ride: rideObj,
+          status: ride.status,
+        },
       });
 
       await sendPushNotification(
@@ -1039,8 +1139,8 @@ export const userController = {
         res.status(400).json({ message: "Invalid Request" });
         return;
       }
-      const { lat, lng } = req.body;
-      if (!lat || !lng) {
+      const { lat, lng, address } = req.body;
+      if (!lat || !lng || !address) {
         res.status(400).json({ message: "Invalid Request" });
         return;
       }
@@ -1051,6 +1151,7 @@ export const userController = {
       }
       user.location = {
         type: "Point",
+        address,
         coordinates: [lng, lat],
       };
       await user.save();
@@ -1087,7 +1188,7 @@ export const userController = {
     }
   },
 
-  updateavailabilityStatus: async (req: Request, res: Response  ) => {
+  updateavailabilityStatus: async (req: Request, res: Response) => {
     try {
       const user = res.locals.user;
       if (!user) {
@@ -1102,10 +1203,45 @@ export const userController = {
 
       user.availability_status = status;
       await user.save();
-      res.status(200).json({ message: "Availability status updated successfully" });
+      res
+        .status(200)
+        .json({ message: "Availability status updated successfully" });
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: "Internal server error" });
+    }
+  },
+
+  getUserStatus: async (req: Request, res: Response) => {
+    try {
+      const userId = res.locals.userId;
+
+      if (!userId) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
+
+      const user = await User.findById(userId);
+
+      if (!user) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
+
+      res.status(200).json({
+        message: "User status retrieved",
+        data: {
+          email: user.email,
+          status: user.account_status,
+          is_email_verified: user.isEmailVerified,
+          is_phone_number_verified: user.isPhoneVerified,
+          profile_completed: user.driverProfile.isProfileCompleted,
+          role: user.role,
+        },
+      });
+    } catch (error) {
+      console.error("Error retrieving user status:", error);
+      res.status(500).json({ message: "Internal Server Error" });
     }
   },
 };
