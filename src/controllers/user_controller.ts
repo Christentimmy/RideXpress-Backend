@@ -309,21 +309,39 @@ export const userController = {
               $in: ["pending", "accepted", "progress", "paused", "panic"],
             },
           },
-          { status: "ended", payment_status: { $ne: "paid" } },
+          // { status: "completed", payment_status: { $ne: "paid" } },
         ],
-      })
-        .populate(
-          "driver",
-          "driverProfile avatar first_name last_name email rating"
-        )
-        .populate("rider", "avatar first_name last_name email")
-        .sort({ requested_at: -1 });
+      }).sort({ requested_at: -1 });
 
       if (!ride) {
         res.status(404).json({ message: "No ride found" });
         return;
       }
-      res.status(200).json({ message: "Ride found", data: ride });
+
+      const driver = await User.findById(ride.driver);
+      if (!driver) {
+        res.status(404).json({ message: "Driver not found" });
+        return;
+      }
+
+      const etaData = await getETAFromLocationIQ(
+        driver!.location!.coordinates as [number, number],
+        ride.pickup_location
+      );
+
+      res.status(200).json({
+        message: "Ride found",
+        data: {
+          ride,
+          driver,
+          eta: etaData
+            ? {
+                minutes: Math.ceil(etaData.duration / 60),
+                distance_km: (etaData.distance / 1000).toFixed(2),
+              }
+            : null,
+        },
+      });
     } catch (error) {
       console.log(error);
       res.status(500).json({ message: "Internal server error" });
@@ -333,6 +351,7 @@ export const userController = {
   rateTrip: async (req: Request, res: Response) => {
     try {
       const { rating, comment, rideId } = req.body;
+      console.log(req.body);
       const user = res.locals.user;
 
       if (!user) {
@@ -834,11 +853,9 @@ export const userController = {
         return;
       }
       if (ride.driver.toString() !== res.locals.user._id.toString()) {
-        res
-          .status(400)
-          .json({
-            message: "You are not authorized to arrive at pick up location",
-          });
+        res.status(400).json({
+          message: "You are not authorized to arrive at pick up location",
+        });
         return;
       }
       ride.status = "arrived";
@@ -1016,18 +1033,18 @@ export const userController = {
         address: ride.pickup_location.address,
         coordinates: [ride.pickup_location.lng, ride.pickup_location.lat],
       };
-
-      driver.driverProfile.allTrips += 1;
       await driver.save();
-
       await ride.save();
 
       res.status(200).json({ message: "Ride started" });
 
+      const rideObj: any = ride.toObject();
+      rideObj.rider = ride.rider._id;
+
       io.to(ride.rider._id.toString()).emit("tripStatus", {
         message: "Driver has started the ride",
         data: {
-          ride: ride,
+          ride: rideObj,
           status: ride.status,
           driver: {
             avatar: driver.avatar,
@@ -1072,7 +1089,17 @@ export const userController = {
         return;
       }
       ride.status = "completed";
+      const user = res.locals.user;
+      user.availability_status = "online";
+      user.location = {
+        type: "Point",
+        address: ride.dropoff_location.address,
+        coordinates: [ride.dropoff_location.lng, ride.dropoff_location.lat],
+      };
+
+      user.driverProfile.allTrips += 1;
       await ride.save();
+      await user.save();
       res.status(200).json({ message: "Ride completed" });
 
       const rideObj: any = ride.toObject();
