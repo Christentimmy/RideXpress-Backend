@@ -36,6 +36,7 @@ router.get("/get-user-status", userController.getUserStatus);
 
 router.use(statusChecker);
 
+router.get("/driver-ride-requests", userController.driverRideRequests);
 router.post("/find-nearby-drivers", userController.findNearByDrivers);
 router.get("/get-all-ride-request", userController.getAllRideRequest);
 router.get("/get-current-ride", userController.getCurrentRide);
@@ -50,6 +51,7 @@ router.post(
 router.post("/accept-ride", userController.acceptRide);
 router.post("/decline-ride", userController.declineRide);
 router.post("/cancel-ride", userController.cancelRide);
+router.post("/cancel-ride-request", userController.cancelRideRequest);
 router.post("/start-ride", userController.startRide);
 router.post("/complete-ride", userController.completeRide);
 

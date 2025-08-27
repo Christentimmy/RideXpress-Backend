@@ -49,6 +49,11 @@ const rideSchema = new Schema<IRide>(
       ref: "User",
       default: [],
     },
+    invited_drivers: {
+      type: [Schema.Types.ObjectId],
+      ref: "User",
+      default: [],
+    },
     rated_by_rider: { type: Boolean, default: false },
     rated_by_driver: { type: Boolean, default: false },
     stops: [

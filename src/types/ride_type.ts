@@ -15,6 +15,7 @@ export interface IRide extends Document {
     transaction_id?: string;
     amount_paid?: number;
     excluded_drivers?: mongoose.Types.ObjectId[];
+    invited_drivers?: mongoose.Types.ObjectId[];
     rated_by_rider: boolean;
     rated_by_driver: boolean;
     stops?: { lat: number; lng: number; address: string }[];

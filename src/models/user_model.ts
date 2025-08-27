@@ -18,7 +18,7 @@ const UserSchema = new Schema<IUser>({
   isPhoneVerified: { type: Boolean, default: false },
   email: { type: String, unique: true, sparse: true, lowercase: true },
   phone: { type: String },
-  password: { type: String, required: true },
+  password: { type: String },
   role: { type: String, enum: ["rider", "driver", "admin"], default: "rider" },
   avatar: { type: String },
   location: {

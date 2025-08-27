@@ -1,14 +1,13 @@
 import { Request, Response } from "express";
 import User from "../models/user_model";
-import bcrypt from "bcrypt";
 import generateToken from "../utils/token_generator";
 import { sendOTP } from "../services/email_service";
 import { redisController } from "./redis_controller";
 
 import bcryptjs from "bcryptjs";
+import { verifyGoogleToken } from "../utils/google_token";
 
 export const authController = {
-
   register: async (req: Request, res: Response) => {
     try {
       if (!req.body) {
@@ -25,8 +24,8 @@ export const authController = {
         res.status(400).json({ message: "User already exists" });
         return;
       }
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
+      const salt = await bcryptjs.genSalt(10);
+      const hashedPassword = await bcryptjs.hash(password, salt);
 
       const user = new User({
         first_name,
@@ -74,8 +73,8 @@ export const authController = {
         return;
       }
 
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
+      const salt = await bcryptjs.genSalt(10);
+      const hashedPassword = await bcryptjs.hash(password, salt);
 
       const user = new User({
         first_name,
@@ -107,6 +106,118 @@ export const authController = {
     }
   },
 
+  googleAuthSignIn: async (req: Request, res: Response) => {
+    try {
+      if (!req.body || typeof req.body !== "object") {
+        res.status(400).json({ message: "Missing request body" });
+        return;
+      }
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ message: "Token is required" });
+
+      const googleUser = await verifyGoogleToken(token);
+
+      const user = await User.findOne({ email: googleUser.email });
+
+      if (!user) {
+        res.status(404).json({ message: "Invalid Credentials" });
+        return;
+      }
+
+      const jwtToken = generateToken(user);
+      if (!user.isPhoneVerified && !user.isEmailVerified) {
+        res.status(402).json({
+          message: "Please verify your phone number or email",
+          jwtToken,
+          email: user.email,
+        });
+        return;
+      }
+
+      if (user.role == "driver") {
+        if (!user.driverProfile.isProfileCompleted) {
+          res.status(405).json({
+            message: "Please complete your driver profile",
+            jwtToken,
+            driverProfile: user.driverProfile,
+          });
+          return;
+        }
+      }
+
+      if (user.account_status === "suspended") {
+        res.status(400).json({ message: "Your account is suspended" });
+        return;
+      }
+
+      if (user.account_status === "banned") {
+        res.status(400).json({ message: "Your account is banned" });
+        return;
+      }
+
+      if (user.role === "rider" && user.payment_fine > 0) {
+        res.status(408).json({ message: "You have a payment fine" });
+        return;
+      }
+
+      res
+        .status(200)
+        .json({ message: "User logged in successfully", token: jwtToken });
+    } catch (error) {
+      console.error("Google login error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  },
+
+  googleAuthSignUp: async (req: Request, res: Response) => {
+    try {
+      if (!req.body || typeof req.body !== "object") {
+        res.status(400).json({ message: "Missing request body" });
+        return;
+      }
+      const { token } = req.body;
+      if (!token) return res.status(400).json({ message: "Token is required" });
+
+      const googleUser = await verifyGoogleToken(token);
+
+      let exist = await User.findOne({ email: googleUser.email });
+      if (exist) {
+        res.status(404).json({ message: "User already exists" });
+        return;
+      }
+
+      if (!googleUser.name) {
+        res.status(400).json({ message: "Invalid credentials" });
+        return;
+      }
+
+      const firstName = googleUser.name?.split(" ")[0] ?? "";
+      const lastName = googleUser.name?.split(" ")[1] ?? "";
+
+      const user = new User({
+        first_name: firstName,
+        last_name: lastName,
+        email: googleUser.email,
+        avatar: googleUser.picture,
+        role: "user",
+      });
+
+      const jwtToken = generateToken(user);
+      await user.save();
+
+      res
+        .status(201)
+        .json({
+          message: "User registered successfully",
+          jwtToken,
+          email: googleUser.email,
+        });
+    } catch (error) {
+      console.error("Google signup error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  },
+
   login: async (req: Request, res: Response) => {
     try {
       if (!req.body) {
@@ -125,7 +236,7 @@ export const authController = {
         res.status(400).json({ message: "Invalid credentials" });
         return;
       }
-      const isMatch = await bcrypt.compare(password, user.password);
+      const isMatch = await bcryptjs.compare(password, user.password);
       if (!isMatch) {
         res.status(400).json({ message: "Invalid credentials" });
         return;
@@ -158,6 +269,11 @@ export const authController = {
 
       if (user.account_status === "banned") {
         res.status(400).json({ message: "Your account is banned" });
+        return;
+      }
+
+      if (user.role === "rider" && user.payment_fine > 0) {
+        res.status(408).json({ message: "You have a payment fine" });
         return;
       }
 
@@ -327,5 +443,4 @@ export const authController = {
       res.status(500).json({ message: "Internal Server Error" });
     }
   },
-  
 };

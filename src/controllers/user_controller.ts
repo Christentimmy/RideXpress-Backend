@@ -56,6 +56,12 @@ export const userController = {
         isPhoneVerified: user.isPhoneVerified,
         avatar: user.avatar,
         address: user.address,
+        payment_fine: user.payment_fine,
+        location: {
+          lat: user.location?.coordinates[1],
+          lng: user.location?.coordinates[0],
+          address: user.location?.address,
+        },
         driverProfile: {
           ...user.driverProfile,
           documents: undefined,
@@ -166,14 +172,14 @@ export const userController = {
         stops,
       } = req.body;
 
+      // === Validate request ===
       if (
         !carSeat ||
         !pickupLocation ||
         !dropoffLocation ||
         wheelChairAccessible === undefined
       ) {
-        res.status(400).json({ message: "All fields are required" });
-        return;
+        return res.status(400).json({ message: "All fields are required" });
       }
 
       if (
@@ -187,7 +193,7 @@ export const userController = {
       if (
         typeof dropoffLocation.lat !== "number" ||
         typeof dropoffLocation.lng !== "number" ||
-        !pickupLocation.address
+        !dropoffLocation.address
       ) {
         return res.status(400).json({ message: "Invalid dropoff location" });
       }
@@ -195,17 +201,17 @@ export const userController = {
       if (stops) {
         for (const stop of stops) {
           if (!stop.lat || !stop.lng || !stop.address) {
-            res.status(400).json({ message: "Invalid stops" });
-            return;
+            return res.status(400).json({ message: "Invalid stops" });
           }
         }
       }
+
       const user = res.locals.user;
       if (user.payment_fine > 0) {
-        res.status(400).json({ message: "You have a payment fine" });
-        return;
+        return res.status(408).json({ message: "You have a payment fine" });
       }
 
+      // === Check for existing pending ride ===
       let currentRide = await Ride.findOne({
         rider: res.locals.userId,
         status: "pending",
@@ -213,13 +219,13 @@ export const userController = {
 
       const declinedDrivers = currentRide?.excluded_drivers || [];
 
-      const closestDriver = await User.findOne({
+      // === Find top 10 nearby drivers ===
+      const closestDrivers = await User.find({
         _id: { $nin: declinedDrivers },
         role: "driver",
         account_status: "active",
         availability_status: "online",
         "driverProfile.wheelChairAccessible": wheelChairAccessible,
-        // "driverProfile.carType": carType,
         "driverProfile.carSeat": { $gte: carSeat },
         location: {
           $near: {
@@ -230,19 +236,20 @@ export const userController = {
             $maxDistance: 10000, // 10 km
           },
         },
-      }).select(
-        "driverProfile avatar first_name last_name email rating location"
-      );
+      })
+        .limit(10)
+        .select(
+          "driverProfile avatar first_name last_name email rating location"
+        );
 
-      if (!closestDriver) {
-        res.status(404).json({ message: "No driver found" });
-        return;
+      if (!closestDrivers.length) {
+        return res.status(404).json({ message: "No drivers found nearby" });
       }
 
+      // === Create or update ride ===
       if (!currentRide) {
-        const ride = new Ride({
+        currentRide = new Ride({
           rider: res.locals.userId,
-          driver: closestDriver._id,
           status: "pending",
           pickup_location: pickupLocation,
           dropoff_location: dropoffLocation,
@@ -250,40 +257,34 @@ export const userController = {
           requested_at: new Date(),
           payment_status: "pending",
           amount_paid: 0,
-          rated: false,
+          rated_by_rider: false,
+          rated_by_driver: false,
           excluded_drivers: [],
+          driver: null,
+          invited_drivers: closestDrivers.map((d) => d._id), // NEW FIELD
         });
-        await ride.save();
-        currentRide = ride;
+        await currentRide.save();
       } else {
         await Ride.findByIdAndUpdate(currentRide._id, {
-          driver: closestDriver._id,
+          invited_drivers: closestDrivers.map((d) => d._id),
         });
       }
 
-      io.to(closestDriver._id.toString()).emit("ride-found", {
-        ride: currentRide,
+      // === Notify all invited drivers ===
+      closestDrivers.forEach((driver) => {
+        io.to(driver._id.toString()).emit("ride-request", {
+          rideId: currentRide!._id,
+          pickup: pickupLocation,
+          dropoff: dropoffLocation,
+        });
       });
 
-      closestDriver.availability_status = "on_trip";
-      await closestDriver.save();
-
-      const etaData = await getETAFromLocationIQ(
-        closestDriver!.location!.coordinates as [number, number],
-        pickupLocation
-      );
-
+      // === Respond to rider ===
       res.status(200).json({
-        message: "Driver found",
+        message: "Ride request sent to nearby drivers",
         data: {
-          driver: closestDriver,
           ride: currentRide,
-          eta: etaData
-            ? {
-                minutes: Math.ceil(etaData.duration / 60),
-                distance_km: (etaData.distance / 1000).toFixed(2),
-              }
-            : null,
+          invited_drivers: closestDrivers,
         },
       });
     } catch (error) {
@@ -300,16 +301,22 @@ export const userController = {
         res.status(400).json({ message: "User not authenticated" });
         return;
       }
-      const roleKey = role === "rider" ? "rider" : "driver";
       const ride = await Ride.findOne({
-        [roleKey]: userId,
+        [role]: userId,
         $or: [
           {
             status: {
-              $in: ["pending", "accepted", "progress", "paused", "panic"],
+              $in: [
+                "pending",
+                "accepted",
+                "arrived",
+                "progress",
+                "paused",
+                "panic",
+              ],
             },
           },
-          // { status: "completed", payment_status: { $ne: "paid" } },
+          { status: "completed", rated_by_rider: false },
         ],
       }).sort({ requested_at: -1 });
 
@@ -318,22 +325,21 @@ export const userController = {
         return;
       }
 
-      const driver = await User.findById(ride.driver);
-      if (!driver) {
-        res.status(404).json({ message: "Driver not found" });
-        return;
-      }
+      let etaData: any = {};
 
-      const etaData = await getETAFromLocationIQ(
-        driver!.location!.coordinates as [number, number],
-        ride.pickup_location
-      );
+      const driver = await User.findById(ride.driver);
+      if (driver) {
+        etaData = await getETAFromLocationIQ(
+          driver!.location!.coordinates as [number, number],
+          ride.pickup_location
+        );
+      }
 
       res.status(200).json({
         message: "Ride found",
         data: {
           ride,
-          driver,
+          driver: driver ?? null,
           eta: etaData
             ? {
                 minutes: Math.ceil(etaData.duration / 60),
@@ -442,7 +448,7 @@ export const userController = {
         return;
       }
       const rides = await Ride.find({
-        rider: userId,
+        $or: [{ rider: userId }, { driver: userId }],
       })
         .populate<{ driver: IUser }>(
           "driver",
@@ -777,57 +783,82 @@ export const userController = {
 
   acceptRide: async (req: Request, res: Response) => {
     try {
-      if (!req.body) {
-        res.status(400).json({ message: "Invalid Request" });
-      }
+      const driverId = res.locals.userId; // logged-in driver
       const { rideId } = req.body;
+
       if (!rideId) {
-        res.status(400).json({ message: "Invalid Request" });
-        return;
+        return res.status(400).json({ message: "Ride ID is required" });
       }
-      const ride = await Ride.findById(rideId).populate<{ rider: IUser }>(
-        "rider"
-      );
 
+      // Atomic check: only accept if still pending & no driver yet
+      const ride = await Ride.findOneAndUpdate(
+        {
+          _id: rideId,
+          status: "pending",
+          driver: { $eq: null },
+        },
+        {
+          $set: { driver: driverId, status: "accepted" },
+        },
+        { new: true }
+      ).populate<{ rider: IUser }>("rider");
+
+      // If null → another driver already accepted
       if (!ride) {
-        res.status(404).json({ message: "Ride not found" });
-        return;
-      }
-      if (ride.status !== "pending") {
-        res.status(400).json({ message: "Ride is not pending" });
-        return;
+        return res.status(400).json({ message: "Ride already taken" });
       }
 
-      if (ride.driver.toString() !== res.locals.user._id.toString()) {
-        res
-          .status(400)
-          .json({ message: "You are not authorized to accept this ride" });
-        return;
+      // ✅ Verify this driver was actually invited
+      if (!ride.invited_drivers?.includes(driverId)) {
+        return res
+          .status(403)
+          .json({ message: "You were not invited to this ride" });
       }
 
-      ride.status = "accepted";
-      await ride.save();
-      res.status(200).json({ message: "Ride accepted" });
-
+      // === Notify rider
       const rideObj: any = ride.toObject();
-
-      // Replace populated fields with just their IDs
       rideObj.rider = ride.rider._id;
+
+      const driver = res.locals.user;
+
+      const etaData = await getETAFromLocationIQ(
+        driver.location!.coordinates as [number, number],
+        ride.pickup_location
+      );
 
       io.to(ride.rider._id.toString()).emit("tripStatus", {
         message: "Driver has accepted your ride",
         data: {
           ride: rideObj,
-          // driver: res.locals.user,
           status: ride.status,
+          driver: res.locals.user,
+          eta: etaData
+            ? {
+                minutes: Math.ceil(etaData.duration / 60),
+                distance_km: (etaData.distance / 1000).toFixed(2),
+              }
+            : null,
         },
       });
-      if (ride.rider.one_signal_id != null) {
+
+      if (ride.rider.one_signal_id) {
         await sendPushNotification(
           ride.rider.one_signal_id,
-          "Your Ride Request has been accepted, check driver location"
+          "Your Ride Request has been accepted. Check driver location."
         );
       }
+
+      res.status(200).json({ message: "Ride accepted successfully" });
+
+      // === Notify other invited drivers they lost
+      ride.invited_drivers.forEach((d: any) => {
+        if (d.toString() !== driverId.toString()) {
+          io.to(d.toString()).emit("ride-rejected", {
+            rideId: ride._id,
+            message: "Another driver accepted the ride",
+          });
+        }
+      });
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: "Internal Server Error" });
@@ -958,14 +989,14 @@ export const userController = {
         res.status(404).json({ message: "Ride not found" });
         return;
       }
-      if (ride.status !== "accepted") {
-        res.status(400).json({ message: "Ride is not accepted" });
+      if (ride.status !== "accepted" && ride.status !== "arrived") {
+        res.status(400).json({ message: "Ride is not accepted or arrived" });
         return;
       }
 
       if (
-        ride.rider.toString() !== res.locals.user._id.toString() &&
-        ride.driver.toString() !== res.locals.user._id.toString()
+        ride.rider._id.toString() !== res.locals.user._id.toString() &&
+        ride.driver._id.toString() !== res.locals.user._id.toString()
       ) {
         res
           .status(400)
@@ -973,12 +1004,34 @@ export const userController = {
         return;
       }
       ride.status = "cancelled";
+      ride.driver.availability_status = "online";
+      if (res.locals.role === "rider") {
+        ride.rider.payment_fine += 3;
+      }
       await ride.save();
+      await ride.rider.save();
       res.status(200).json({ message: "Ride cancelled" });
 
-      io.to(ride.driver.toString()).emit("tripStatus", {
+      const rideObj: any = ride.toObject();
+      rideObj.rider = ride.rider._id;
+      rideObj.driver = ride.driver._id;
+
+      io.to(rideObj.rider.toString()).emit("tripStatus", {
         message: `The ${user.role} has cancelled the ride.`,
         rideId: ride._id,
+        data: {
+          ride: rideObj,
+          status: "cancelled",
+        },
+      });
+
+      io.to(rideObj.driver.toString()).emit("tripStatus", {
+        message: `The ${user.role} has cancelled the ride.`,
+        rideId: ride._id,
+        data: {
+          ride: rideObj,
+          status: "cancelled",
+        },
       });
 
       let notifyOtherPartyId: any;
@@ -991,6 +1044,41 @@ export const userController = {
         notifyOtherPartyId,
         "The passenger has cancelled the ride request."
       );
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  },
+
+  cancelRideRequest: async (req: Request, res: Response) => {
+    try {
+      const { rideId } = req.body;
+      if (!rideId) {
+        res.status(400).json({ message: "Invalid Request" });
+        return;
+      }
+      const ride = await Ride.findById(rideId)
+        .populate<{ rider: IUser }>("rider")
+        .populate<{ driver: IUser }>("driver");
+
+      if (!ride) {
+        res.status(404).json({ message: "Ride not found" });
+        return;
+      }
+      if (ride.status !== "pending") {
+        res.status(400).json({ message: "Ride is not pending" });
+        return;
+      }
+
+      if (res.locals.role === "driver") {
+        ride.excluded_drivers?.push(res.locals.userId);
+      }
+      if (res.locals.role === "rider") {
+        ride.status = "cancelled";
+      }
+      await ride.save();
+
+      res.status(200).json({ message: "Ride cancelled" });
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: "Internal server error" });
@@ -1255,6 +1343,11 @@ export const userController = {
         return;
       }
 
+      if (user.role === "rider" && user.payment_fine > 0) {
+        res.status(405).send({ message: "You have a payment fine" });
+        return;
+      }
+
       res.status(200).json({
         message: "User status retrieved",
         data: {
@@ -1269,6 +1362,23 @@ export const userController = {
     } catch (error) {
       console.error("Error retrieving user status:", error);
       res.status(500).json({ message: "Internal Server Error" });
+    }
+  },
+
+  driverRideRequests: async (req: Request, res: Response) => {
+    try {
+      const driverId = res.locals.userId;
+
+      const rides = await Ride.find({
+        invited_drivers: { $in: [driverId] },
+        status: "pending",
+        driver: null,
+      }).select("pickup_location dropoff_location rider createdAt expires_at");
+
+      res.status(200).json({ message: "Ride requests retrieved", data: rides });
+    } catch (err) {
+      console.log(err);
+      res.status(500).json({ message: "Internal server error" });
     }
   },
 };

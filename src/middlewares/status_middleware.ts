@@ -35,6 +35,11 @@ export async function statusChecker(req: Request, res: Response, next: NextFunct
             return;
         }
 
+        if(user.role === "rider" && user.payment_fine > 0){
+            res.status(400).send({ message: "You have a payment fine" });
+            return;
+        }
+
         res.locals.userId = userId;
         res.locals.user = user;
         next();
