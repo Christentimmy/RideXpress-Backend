@@ -7,6 +7,7 @@ import { io } from "../config/socket";
 import sendPushNotification from "../config/onesignal";
 import getCoordinatesFromAddress from "../utils/get_coordinates_from_address";
 import { getETAFromLocationIQ } from "../utils/get_eta_from_coordinates";
+import Notification from "../models/notification_model";
 
 export const userController = {
   uploadProfile: async (req: Request, res: Response) => {
@@ -356,9 +357,10 @@ export const userController = {
 
   rateTrip: async (req: Request, res: Response) => {
     try {
-      const { rating, comment, rideId } = req.body;
+      let { rating, comment, rideId } = req.body;
       console.log(req.body);
       const user = res.locals.user;
+      rating = Number(rating);
 
       if (!user) {
         return res.status(400).json({ message: "User not authenticated" });
@@ -426,6 +428,7 @@ export const userController = {
         driver: user.role === "driver" ? user._id : ride.rider,
         rating,
         comment,
+        rideId,
       });
       await rateModel.save();
 
@@ -461,24 +464,24 @@ export const userController = {
       if (timeRange && timeRange !== "all time") {
         const now = new Date();
         let startDate = new Date();
-        
+
         switch (timeRange) {
-          case 'last 30 days':
+          case "last 30 days":
             startDate.setDate(now.getDate() - 30);
             break;
-          case 'last 3 months':
+          case "last 3 months":
             startDate.setMonth(now.getMonth() - 3);
             break;
-          case 'this year':
+          case "this year":
             startDate = new Date(now.getFullYear(), 0, 1); // January 1st of current year
             break;
           default:
             break;
         }
-        
+
         timeQuery = { requested_at: { $gte: startDate } };
       }
-            
+
       const rides = await Ride.find({
         $or: [{ rider: userId }, { driver: userId }],
         ...statusQuery,
@@ -500,19 +503,37 @@ export const userController = {
         return;
       }
 
-      const response = rides.map((ride) => {
-        return {
-          _id: ride._id,
-          status: ride.status,
-          pickup_location: ride.pickup_location,
-          dropoff_location: ride.dropoff_location,
-          fare: ride.fare,
-          amount_paid: ride.amount_paid,
-          rated_by_rider: ride.rated_by_rider,
-          rated_by_driver: ride.rated_by_driver,
-          requested_at: ride.requested_at,
-        };
-      });
+      const response = await Promise.all(
+        rides.map(async (ride) => {
+          const rating = await Rating.findOne({ rideId: ride._id });
+          return {
+            _id: ride._id,
+            status: ride.status,
+            pickup_location: ride.pickup_location,
+            dropoff_location: ride.dropoff_location,
+            fare: ride.fare,
+            amount_paid: ride.amount_paid,
+            rated_by_rider: ride.rated_by_rider,
+            rated_by_driver: ride.rated_by_driver,
+            driverProfile: ride.driver
+              ? {
+                  first_name: ride.driver.first_name,
+                  last_name: ride.driver.last_name,
+                  avatar: ride.driver.avatar,
+                }
+              : null,
+            riderProfile: ride.rider
+              ? {
+                  first_name: ride.rider.first_name,
+                  last_name: ride.rider.last_name,
+                  avatar: ride.rider.avatar,
+                }
+              : null,
+            requested_at: ride.requested_at,
+            rating: rating?.rating || null,
+          };
+        })
+      );
 
       res.status(200).json({
         message: "Ride history found",
@@ -891,7 +912,8 @@ export const userController = {
       if (ride.rider.one_signal_id) {
         await sendPushNotification(
           ride.rider.one_signal_id,
-          "Your Ride Request has been accepted. Check driver location."
+          "Your Ride Request has been accepted. Check driver location.",
+          ride.rider._id
         );
       }
 
@@ -955,7 +977,8 @@ export const userController = {
       if (ride.rider.one_signal_id != null) {
         await sendPushNotification(
           ride.rider.one_signal_id,
-          "Your Ride Request has been accepted, check driver location"
+          "Your Ride Request has been accepted, check driver location",
+          ride.rider._id
         );
       }
       res.status(200).json({ message: "Arrived at pick up location" });
@@ -1012,7 +1035,8 @@ export const userController = {
       });
       await sendPushNotification(
         rider.one_signal_id,
-        "Your Ride Request has been declined"
+        "Your Ride Request has been declined",
+        rider._id
       );
     } catch (error) {
       console.error(error);
@@ -1081,15 +1105,19 @@ export const userController = {
         },
       });
 
-      let notifyOtherPartyId: any;
+      let notifyOtherPartySignalId: any;
+      let notifyOtherPartyUserId: any;
       if (ride.rider.toString() === user._id.toString()) {
-        notifyOtherPartyId = ride.driver.one_signal_id;
+        notifyOtherPartySignalId = ride.driver.one_signal_id;
+        notifyOtherPartyUserId = ride.driver._id;
       } else {
-        notifyOtherPartyId = ride.rider.one_signal_id;
+        notifyOtherPartySignalId = ride.rider.one_signal_id;
+        notifyOtherPartyUserId = ride.rider._id;
       }
       await sendPushNotification(
-        notifyOtherPartyId,
-        "The passenger has cancelled the ride request."
+        notifyOtherPartySignalId,
+        "The passenger has cancelled the ride request.",
+        notifyOtherPartyUserId
       );
     } catch (error) {
       console.error(error);
@@ -1191,7 +1219,8 @@ export const userController = {
 
       await sendPushNotification(
         ride.rider.one_signal_id,
-        "Driver has started the ride"
+        "Driver has started the ride",
+        ride.rider._id
       );
     } catch (error) {
       console.error(error);
@@ -1250,7 +1279,8 @@ export const userController = {
 
       await sendPushNotification(
         ride.rider.one_signal_id,
-        "Driver has completed the ride"
+        "Driver has completed the ride",
+        ride.rider._id
       );
     } catch (error) {
       console.error(error);
@@ -1425,6 +1455,71 @@ export const userController = {
       res.status(200).json({ message: "Ride requests retrieved", data: rides });
     } catch (err) {
       console.log(err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  },
+
+  markNotification: async (req: Request, res: Response) => {
+    try {
+      const userId = res.locals.userId;
+      const notificationId = req.params.id;
+
+      if (!userId || !notificationId) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
+
+      await Notification.updateOne(
+        { userId, _id: notificationId },
+        { read: true }
+      );
+
+      res.status(200).json({ message: "Notification marked as read" });
+    } catch (err) {
+      console.error("Error in markNotification:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  },
+
+  markNotificationById: async (req: Request, res: Response) => {
+    try {
+      const userId = res.locals.userId;
+      const notificationId = req.params.id;
+
+      if (!userId || !notificationId) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
+
+      await Notification.updateOne(
+        { userId, _id: notificationId },
+        { read: true }
+      );
+
+      res.status(200).json({ message: "Notification marked as read" });
+    } catch (err) {
+      console.error("Error in markNotificationById:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  },
+
+  getAllNotifications: async (req: Request, res: Response) => {
+    try {
+      const userId = res.locals.userId;
+
+      if (!userId) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
+
+      const notifications = await Notification.find({ userId });
+
+      res.status(200).json({
+        message: "Notifications retrieved",
+        data: notifications,
+      });
+    } catch (err) {
+      console.error("Error in getAllNotifications:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   },

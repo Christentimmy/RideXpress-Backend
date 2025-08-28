@@ -12,6 +12,10 @@ const ratingSchema = new Schema<IRating>({
         ref: "User",
         required: true,
     },
+    rideId: {
+        type: Schema.Types.ObjectId,
+        ref: "Ride",
+    },
     rating: {
         type: Number,
         required: true,

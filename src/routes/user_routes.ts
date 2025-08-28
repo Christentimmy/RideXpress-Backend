@@ -67,4 +67,9 @@ router.post(
   userController.updateavailabilityStatus
 );
 
+//Notification
+router.get("/get-all-notifications", userController.getAllNotifications);
+router.post("/mark-notification", userController.markNotification);
+router.patch("/mark-notification/:id", userController.markNotificationById);
+
 export default router;
