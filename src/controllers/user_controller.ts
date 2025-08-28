@@ -442,13 +442,47 @@ export const userController = {
 
   getRideHistory: async (req: Request, res: Response) => {
     try {
+      const { pageNum = 1, limitNum = 20, status, timeRange } = req.query;
+
+      const page = Number(pageNum);
+      const limit = Number(limitNum);
+      const skip = (page - 1) * limit;
+
       const userId = res.locals.userId;
       if (!userId) {
         res.status(400).json({ message: "User not authenticated" });
         return;
       }
+      let statusQuery = {};
+      if (status && status !== null && status !== "all") {
+        statusQuery = { status };
+      }
+      let timeQuery = {};
+      if (timeRange && timeRange !== "all time") {
+        const now = new Date();
+        let startDate = new Date();
+        
+        switch (timeRange) {
+          case 'last 30 days':
+            startDate.setDate(now.getDate() - 30);
+            break;
+          case 'last 3 months':
+            startDate.setMonth(now.getMonth() - 3);
+            break;
+          case 'this year':
+            startDate = new Date(now.getFullYear(), 0, 1); // January 1st of current year
+            break;
+          default:
+            break;
+        }
+        
+        timeQuery = { requested_at: { $gte: startDate } };
+      }
+            
       const rides = await Ride.find({
         $or: [{ rider: userId }, { driver: userId }],
+        ...statusQuery,
+        ...timeQuery,
       })
         .populate<{ driver: IUser }>(
           "driver",
@@ -458,7 +492,9 @@ export const userController = {
           "rider",
           "avatar first_name last_name email"
         )
-        .sort({ requested_at: -1 });
+        .sort({ requested_at: -1 })
+        .skip(skip)
+        .limit(limit);
       if (!rides) {
         res.status(404).json({ message: "No ride history found" });
         return;
@@ -478,7 +514,18 @@ export const userController = {
         };
       });
 
-      res.status(200).json({ message: "Ride history found", data: response });
+      res.status(200).json({
+        message: "Ride history found",
+        data: response,
+        pagination: {
+          page,
+          limit,
+          total: rides.length,
+          totalPages: Math.ceil(rides.length / limit),
+          hasNextPage: page < Math.ceil(rides.length / limit),
+          hasPrevPage: page > 1,
+        },
+      });
     } catch (error) {
       console.log(error);
       res.status(500).json({ message: "Internal server error" });
