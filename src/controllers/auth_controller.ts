@@ -3,6 +3,7 @@ import User from "../models/user_model";
 import generateToken from "../utils/token_generator";
 import { sendOTP } from "../services/email_service";
 import { redisController } from "./redis_controller";
+import tokenBlacklistSchema from "../models/token_blacklist_model";
 
 import bcryptjs from "bcryptjs";
 import { verifyGoogleToken } from "../utils/google_token";
@@ -205,13 +206,11 @@ export const authController = {
       const jwtToken = generateToken(user);
       await user.save();
 
-      res
-        .status(201)
-        .json({
-          message: "User registered successfully",
-          jwtToken,
-          email: googleUser.email,
-        });
+      res.status(201).json({
+        message: "User registered successfully",
+        jwtToken,
+        email: googleUser.email,
+      });
     } catch (error) {
       console.error("Google signup error:", error);
       res.status(500).json({ message: "Internal server error" });
@@ -441,6 +440,28 @@ export const authController = {
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: "Internal Server Error" });
+    }
+  },
+
+  logoutUser: async (req: Request, res: Response) => {
+    try {
+      const token = req.headers.authorization?.split(" ")[1];
+      const userId = res.locals.userId;
+
+      if (!token) {
+        return res.status(401).json({ message: "No token provided" });
+      }
+
+      if (!userId) {
+        return res.status(401).json({ message: "No user found" });
+      }
+
+      await tokenBlacklistSchema.create({ token, userId });
+
+      res.status(200).json({ message: "Logout successful" });
+    } catch (error) {
+      console.error("❌ Error in logout:", error);
+      res.status(500).json({ message: "Server error" });
     }
   },
 };

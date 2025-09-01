@@ -606,7 +606,12 @@ export const userController = {
       }
       const user: IUser = res.locals.user;
 
-      const { first_name, last_name } = req.body;
+      const { first_name, last_name, email, phone } = req.body;
+
+      if (!first_name && !last_name && !req.file && !email && !phone) {
+        res.status(400).json({ message: "At least one field is required" });
+        return;
+      }
 
       if (first_name) {
         user.first_name = first_name;
@@ -617,10 +622,11 @@ export const userController = {
       if (req.file) {
         user.avatar = req.file.path;
       }
-
-      if (!first_name && !last_name && !req.file) {
-        res.status(400).json({ message: "At least one field is required" });
-        return;
+      if (email) {
+        user.email = email;
+      }
+      if (phone) {
+        user.phone = phone;
       }
 
       await user.save();
