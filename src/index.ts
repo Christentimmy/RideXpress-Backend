@@ -4,6 +4,7 @@ import { connectToDatabase } from "./config/database";
 import authRouter from "./routes/auth_routes";
 import userRouter from "./routes/user_routes";
 import { setupSocket } from "./config/socket";
+import supportRouter from "./routes/support_ticket_routes"
 import morgan from "morgan";
 
 
@@ -18,6 +19,7 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
+app.use("/api/support", supportRouter);
 
 // Connect to database
 connectToDatabase();
