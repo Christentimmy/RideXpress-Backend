@@ -14,6 +14,11 @@ const messageSchema = new Schema<IMessage>(
       ref: "User",
       required: true,
     },
+    rideId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Ride",
+      required: true,
+    },
     message: {
       type: String,
       required: false,

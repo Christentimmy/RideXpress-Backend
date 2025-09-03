@@ -41,6 +41,7 @@ export function setupSocket(server: any) {
         }
 
         socket.join(userId);
+        
 
         // Register new connection
         onlineUsers.set(userId, socket.id);
@@ -48,6 +49,8 @@ export function setupSocket(server: any) {
         socket.emit("userDetails", { data: user });
 
         //Typing
+        socketController.joinRoom(io, socket);
+        socketController.chatHandler(io, socket);
         socketController.startTyping(io, socket, userId);
         socketController.stopTyping(io, socket, userId);
 

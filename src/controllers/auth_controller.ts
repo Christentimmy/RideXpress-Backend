@@ -9,6 +9,7 @@ import bcryptjs from "bcryptjs";
 import { verifyGoogleToken } from "../utils/google_token";
 
 export const authController = {
+  
   register: async (req: Request, res: Response) => {
     try {
       if (!req.body) {
@@ -376,7 +377,16 @@ export const authController = {
           .json({ message: "old password and new password required" });
         return;
       }
-      const user = res.locals.user;
+      const userId = res.locals.userId;
+      const user = await User.findById(userId);
+      if (!user) {
+        res.status(404).json({ message: "User Not Found" });
+        return;
+      }
+      if (user.password === null || user.password === undefined) {
+        res.status(404).json({ message: "Account Does not have a password" });
+        return;
+      }
       const validatePassword = await bcryptjs.compare(
         old_password,
         user.password

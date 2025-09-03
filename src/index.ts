@@ -6,7 +6,7 @@ import userRouter from "./routes/user_routes";
 import { setupSocket } from "./config/socket";
 import supportRouter from "./routes/support_ticket_routes"
 import morgan from "morgan";
-
+import messageRouter from "./routes/message_route";
 
 const app: Express = express();
 const port = config.port;
@@ -20,6 +20,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use("/api/auth", authRouter);
 app.use("/api/user", userRouter);
 app.use("/api/support", supportRouter);
+app.use("/api/message", messageRouter);
 
 // Connect to database
 connectToDatabase();

@@ -67,6 +67,8 @@ export const userController = {
           ...user.driverProfile,
           documents: undefined,
         },
+        createdAt: user.createdAt,
+        rating: user.rating.avg,
       };
 
       res
@@ -165,6 +167,11 @@ export const userController = {
 
   findNearByDrivers: async (req: Request, res: Response) => {
     try {
+      if (!req.body) {
+        res.status(400).json({ message: "invalid request" });
+        return;
+      }
+
       const {
         carSeat,
         pickupLocation,
@@ -302,6 +309,12 @@ export const userController = {
         res.status(400).json({ message: "User not authenticated" });
         return;
       }
+      let key = "";
+      if (role === "rider") {
+        key = "rated_by_rider";
+      } else {
+        key = "rated_by_driver";
+      }
       const ride = await Ride.findOne({
         [role]: userId,
         $or: [
@@ -317,9 +330,11 @@ export const userController = {
               ],
             },
           },
-          { status: "completed", rated_by_rider: false },
+          { status: "completed", [key]: false },
         ],
-      }).sort({ requested_at: -1 });
+      })
+        .populate<{ rider: IUser }>("rider")
+        .sort({ requested_at: -1 });
 
       if (!ride) {
         res.status(404).json({ message: "No ride found" });
@@ -336,10 +351,27 @@ export const userController = {
         );
       }
 
+      const rideObj: any = ride.toObject();
+
+      rideObj.riderProfile = {
+        id: ride.rider._id,
+        first_name: ride.rider.first_name,
+        last_name: ride.rider.last_name,
+        avatar: ride.rider.avatar,
+      };
+      rideObj.rider = ride.rider._id;
+
+      rideObj.eta = etaData
+        ? {
+            minutes: Math.ceil(etaData.duration / 60),
+            distance_km: (etaData.distance / 1000).toFixed(2),
+          }
+        : null;
+
       res.status(200).json({
         message: "Ride found",
         data: {
-          ride,
+          ride: rideObj,
           driver: driver ?? null,
           eta: etaData
             ? {
@@ -358,7 +390,6 @@ export const userController = {
   rateTrip: async (req: Request, res: Response) => {
     try {
       let { rating, comment, rideId } = req.body;
-      console.log(req.body);
       const user = res.locals.user;
       rating = Number(rating);
 
@@ -400,7 +431,6 @@ export const userController = {
       } else {
         ride.rated_by_driver = true;
       }
-      await ride.save();
 
       // Figure out who is being rated
       const personToRateId = user.role === "rider" ? ride.driver : ride.rider;
@@ -422,15 +452,28 @@ export const userController = {
         $set: { "rating.avg": Number(updatedAvg.toFixed(1)) },
         $inc: { "rating.total": 1 },
       });
+      let ratingDoc = await Rating.findOne({ rideId });
 
-      const rateModel = new Rating({
-        user: user.role === "rider" ? user._id : ride.driver,
-        driver: user.role === "driver" ? user._id : ride.rider,
-        rating,
-        comment,
-        rideId,
-      });
-      await rateModel.save();
+      if (!ratingDoc) {
+        ratingDoc = new Rating({
+          rideId,
+          rider: ride.rider,
+          driver: ride.driver,
+        });
+      }
+
+      if (user.role === "rider") {
+        ratingDoc.riderRating = rating;
+        ratingDoc.riderComment = comment;
+        ride.rated_by_rider = true;
+      } else {
+        ratingDoc.driverRating = rating;
+        ratingDoc.driverComment = comment;
+        ride.rated_by_driver = true;
+      }
+
+      await ratingDoc.save();
+      await ride.save();
 
       res.status(200).json({
         message: `${
@@ -530,7 +573,14 @@ export const userController = {
                 }
               : null,
             requested_at: ride.requested_at,
-            rating: rating?.rating || null,
+            rating:
+              res.locals.role === "rider"
+                ? rating?.driverRating
+                : rating?.riderRating,
+            comment:
+              res.locals.role === "rider"
+                ? rating?.driverComment
+                : rating?.riderComment,
           };
         })
       );
@@ -648,17 +698,14 @@ export const userController = {
         vehicleRegNumber,
         carColor,
         vehicleModel,
-        seat,
         licensePlate,
         vehicleYear,
-        wheelChairAccessible = false,
       } = req.body;
 
       if (
         !vehicleRegNumber ||
         !carColor ||
         !vehicleModel ||
-        !seat ||
         !licensePlate ||
         !vehicleYear
       ) {
@@ -681,14 +728,43 @@ export const userController = {
       user.driverProfile.vehicleRegNumber = vehicleRegNumber;
       user.driverProfile.carColor = carColor;
       user.driverProfile.carModel = vehicleModel;
-      user.driverProfile.carSeat = seat;
       user.driverProfile.carPlate = licensePlate;
       user.driverProfile.vehicleYear = vehicleYear;
-      user.driverProfile.wheelChairAccessible = wheelChairAccessible;
 
       await user.save();
 
       res.status(200).json({ message: "Vehicle-Registered" });
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  },
+
+  registerCarType: async (req: Request, res: Response) => {
+    try {
+      if (!req.body) {
+        res.status(400).json({ message: "Invalid Request" });
+        return;
+      }
+      const { seats, wheelChairAccessible } = req.body;
+      if (!seats || wheelChairAccessible === undefined) {
+        res.status(400).json({ message: "Invalid Request" });
+        return;
+      }
+      const userId = res.locals.userId;
+      if (!userId) {
+        res.status(400).json({ message: "User not found" });
+        return;
+      }
+      const user = await User.findById(userId);
+      if (!user) {
+        res.status(400).json({ message: "User not found" });
+        return;
+      }
+      user.driverProfile.carSeat = seats;
+      user.driverProfile.wheelChairAccessible = wheelChairAccessible;
+      await user.save();
+      res.status(200).json({ message: "Car Type Registered" });
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: "Internal server error" });
@@ -737,17 +813,24 @@ export const userController = {
 
   getAllRatings: async (req: Request, res: Response) => {
     try {
+      const { pageNum = 1, limitNum = 20 } = req.query;
+      const page = Number(pageNum);
+      const limit = Number(limitNum);
+      const skip = (page - 1) * limit;
+
       const user = res.locals.user;
       if (!user) {
         res.status(404).json({ message: "User not found" });
         return;
       }
       const query = {
-        $or: [{ user: user._id }, { driver: user._id }],
+        $or: [{ rider: user._id }, { driver: user._id }],
       };
       const ratings = await Rating.find(query)
-        .populate<{ user: IUser }>("user", "first_name last_name avatar")
-        .populate<{ driver: IUser }>("driver", "first_name last_name avatar");
+        .populate<{ rider: IUser }>("rider", "first_name last_name avatar")
+        .populate<{ driver: IUser }>("driver", "first_name last_name avatar")
+        .skip(skip)
+        .limit(limit);
 
       if (!ratings) {
         res.status(404).json({ message: "No ratings found" });
@@ -755,32 +838,49 @@ export const userController = {
       }
 
       const response = ratings.map((rating) => ({
-        ratingId: rating._id,
-        user: {
-          avatar: rating.user.avatar,
-          first_name: rating.user.first_name,
-          last_name: rating.user.last_name,
+        id: rating._id,
+        rider: {
+          avatar: rating.rider.avatar,
+          first_name: rating.rider.first_name,
+          last_name: rating.rider.last_name,
         },
         driver: {
           avatar: rating.driver.avatar,
           first_name: rating.driver.first_name,
           last_name: rating.driver.last_name,
         },
-        rating: rating.rating,
-        comment: rating.comment,
+        riderRating: rating.riderRating,
+        riderComment: rating.riderComment,
+
+        driverRating: rating.driverRating,
+        driverComment: rating.driverComment,
         createdAt: rating.createdAt,
       }));
 
-      res.status(200).json({ message: "Ratings found", data: response });
+      res
+        .status(200)
+        .json({
+          message: "Ratings found",
+          data: response,
+          pagination: {
+            page,
+            limit,
+            total: ratings.length,
+            totalPages: Math.ceil(ratings.length / limit),
+            hasNextPage: page < Math.ceil(ratings.length / limit),
+            hasPrevPage: page > 1,
+          },
+        });
     } catch (error) {
       console.error(error);
-      res.status(500).json({ message: "Server error" });
+      res.status(500).json({ message: "Internal Server Error" });
     }
   },
 
   getTodayRideSummary: async (req: Request, res: Response) => {
     try {
       const user = res.locals.user;
+      const role = res.locals.role;
       if (!user) {
         res.status(404).json({ message: "User not found" });
         return;
@@ -789,8 +889,9 @@ export const userController = {
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
+      let key = role === "driver" ? "driver" : "rider";
       const rides = await Ride.find({
-        user: user._id,
+        [key]: user._id,
         status: "completed",
         requested_at: {
           $gte: today,
@@ -922,8 +1023,23 @@ export const userController = {
           ride.rider._id
         );
       }
+      rideObj.riderProfile = {
+        id: ride.rider._id,
+        first_name: ride.rider.first_name,
+        last_name: ride.rider.last_name,
+        avatar: ride.rider.avatar,
+      };
 
-      res.status(200).json({ message: "Ride accepted successfully" });
+      rideObj.eta = etaData
+        ? {
+            minutes: Math.ceil(etaData.duration / 60),
+            distance_km: (etaData.distance / 1000).toFixed(2),
+          }
+        : null;
+
+      res
+        .status(200)
+        .json({ message: "Ride accepted successfully", data: rideObj });
 
       // === Notify other invited drivers they lost
       ride.invited_drivers.forEach((d: any) => {
@@ -971,6 +1087,12 @@ export const userController = {
 
       // Replace populated fields with just their IDs
       rideObj.rider = ride.rider._id;
+      rideObj.riderProfile = {
+        id: ride.rider._id,
+        first_name: ride.rider.first_name,
+        last_name: ride.rider.last_name,
+        avatar: ride.rider.avatar,
+      };
 
       io.to(ride.rider._id.toString()).emit("tripStatus", {
         message: "Driver has arrived at pick up location",
@@ -987,7 +1109,9 @@ export const userController = {
           ride.rider._id
         );
       }
-      res.status(200).json({ message: "Arrived at pick up location" });
+      res
+        .status(200)
+        .json({ message: "Arrived at pick up location", data: rideObj });
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: "Internal Server Error" });
@@ -1012,38 +1136,20 @@ export const userController = {
         res.status(400).json({ message: "Ride is not pending" });
         return;
       }
-      if (ride.driver.toString() !== res.locals.user._id.toString()) {
+      if (!ride.invited_drivers?.includes(driver._id.toString())) {
         res
           .status(400)
           .json({ message: "You are not authorized to decline this ride" });
         return;
       }
-      ride.status = "rejected";
-      await ride.save();
-      res.status(200).json({ message: "Ride declined" });
-
-      const rider = await User.findById(ride.rider);
-      if (!rider) {
-        console.log("Rider-could-not-be-found");
-        return;
-      }
-
-      io.to(ride.rider.toString()).emit("tripStatus", {
-        message: "Driver has cancelled the ride request",
-        data: {
-          ride: ride,
-          driver: {
-            avatar: driver.avatar,
-            first_name: driver.first_name,
-            last_name: driver.last_name,
-          },
-        },
-      });
-      await sendPushNotification(
-        rider.one_signal_id,
-        "Your Ride Request has been declined",
-        rider._id
+      ride.excluded_drivers = [...(ride.excluded_drivers || []), driver._id];
+      ride.invited_drivers = ride.invited_drivers.filter(
+        (id) => id.toString() !== driver._id.toString()
       );
+
+      await ride.save();
+
+      res.status(200).json({ message: "Ride declined successfully" });
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: "Internal server error" });
@@ -1270,10 +1376,16 @@ export const userController = {
       user.driverProfile.allTrips += 1;
       await ride.save();
       await user.save();
-      res.status(200).json({ message: "Ride completed" });
 
       const rideObj: any = ride.toObject();
+      rideObj.riderProfile = {
+        id: ride.rider._id,
+        first_name: ride.rider.first_name,
+        last_name: ride.rider.last_name,
+        avatar: ride.rider.avatar,
+      };
       rideObj.rider = ride.rider._id;
+      res.status(200).json({ message: "Ride completed", data: rideObj });
 
       io.to(ride.rider._id.toString()).emit("tripStatus", {
         message: "Driver has completed the ride",
@@ -1399,6 +1511,30 @@ export const userController = {
         return;
       }
 
+      const ride = await Ride.findOne({
+        driver: user._id,
+        $or: [
+          {
+            status: {
+              $in: [
+                "pending",
+                "accepted",
+                "arrived",
+                "progress",
+                "paused",
+                "panic",
+              ],
+            },
+          },
+          { status: "completed", rated_by_rider: false },
+        ],
+      }).sort({ requested_at: -1 });
+
+      if (ride) {
+        res.status(400).json({ message: "You have an active ride" });
+        return;
+      }
+
       user.availability_status = status;
       await user.save();
       res
@@ -1451,14 +1587,57 @@ export const userController = {
   driverRideRequests: async (req: Request, res: Response) => {
     try {
       const driverId = res.locals.userId;
+      const driver = res.locals.user;
+
+      if (!driver) {
+        res.status(404).json({ message: "User not found" });
+        return;
+      }
 
       const rides = await Ride.find({
         invited_drivers: { $in: [driverId] },
         status: "pending",
         driver: null,
-      }).select("pickup_location dropoff_location rider createdAt expires_at");
+      }).populate<{ rider: IUser }>("rider");
 
-      res.status(200).json({ message: "Ride requests retrieved", data: rides });
+      // const etaData = await getETAFromLocationIQ(
+      //   driver.location!.coordinates as [number, number],
+      //   ride.pickup_location
+      // );
+
+      const response = await Promise.all(
+        rides.map(async (ride) => {
+          const etaData = await getETAFromLocationIQ(
+            driver.location!.coordinates as [number, number],
+            ride.pickup_location
+          );
+          return {
+            _id: ride._id,
+            status: ride.status,
+            pickup_location: ride.pickup_location,
+            dropoff_location: ride.dropoff_location,
+            riderProfile: ride.rider
+              ? {
+                  id: ride.rider._id,
+                  first_name: ride.rider.first_name,
+                  last_name: ride.rider.last_name,
+                  avatar: ride.rider.avatar,
+                }
+              : null,
+            requested_at: ride.requested_at,
+            eta: etaData
+              ? {
+                  minutes: Math.ceil(etaData.duration / 60),
+                  distance_km: (etaData.distance / 1000).toFixed(2),
+                }
+              : null,
+          };
+        })
+      );
+
+      res
+        .status(200)
+        .json({ message: "Ride requests retrieved", data: response });
     } catch (err) {
       console.log(err);
       res.status(500).json({ message: "Internal server error" });

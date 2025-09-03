@@ -10,7 +10,7 @@ router.use(tokenValidationMiddleware);
 router.use(statusChecker);
 
 router.post("/send",messageController.sendMessage);
-router.get("/history/:otherUserId", messageController.getMessageHistory);
+router.get("/history/:rideId", messageController.getMessageHistory);
 router.patch("/:messageId/read", messageController.markMessageAsRead);
 router.get("/unread-count/:chatWith", messageController.getUnreadMessageCount);
 router.get("/get-chat-list", messageController.getChatList);

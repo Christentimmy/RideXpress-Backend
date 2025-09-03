@@ -31,7 +31,9 @@ router.post("/save-address", userController.saveAddress);
 router.get("/get-user-details", userController.getUserDetails);
 router.post("/update-location", userController.updateLocation);
 router.post("/save-signal-id/:id", userController.saveSignalId);
+
 router.post("/register-vehicle", userController.registerVehicle);
+router.post("/register-car-type", userController.registerCarType);
 router.get("/get-user-status", userController.getUserStatus);
 
 router.use(statusChecker);

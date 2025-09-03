@@ -11,11 +11,11 @@ router.post("/login", authController.login);
 router.post("/send-otp", authController.sendOTp);
 router.post("/verify-otp", authController.verifyOTP);
 router.post("/driver-register", authController.driverRegister);
-router.post("/change-password", authController.changePassword);
 router.post("/forgot-password", authController.forgotPassword);
 router.post("/update-email-or-number", authController.updateEmailOrNumber);
 
 router.use(tokenValidationMiddleware);
 router.post("/logout", authController.logoutUser);
+router.post("/change-password", authController.changePassword);
 
 export default router;
