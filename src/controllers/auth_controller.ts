@@ -201,7 +201,7 @@ export const authController = {
         last_name: lastName,
         email: googleUser.email,
         avatar: googleUser.picture,
-        role: "user",
+        role: "rider",
       });
 
       const jwtToken = generateToken(user);
