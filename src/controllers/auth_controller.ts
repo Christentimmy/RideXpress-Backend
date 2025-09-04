@@ -91,13 +91,12 @@ export const authController = {
       });
 
       const otp = Math.floor(1000 + Math.random() * 9000).toString();
-      console.log(otp);
-      // const success = await sendOTP(user.email, otp);
-      // if (!success) {
-      //   res.status(500).json({ message: "Failed to send OTP" });
-      //   return;
-      // }
-      await redisController.saveOtpToStore(user.email, otp);
+      const success = await sendOTP(email, otp);
+      if (!success) {
+        res.status(500).json({ message: "Failed to send OTP" });
+        return;
+      }
+      await redisController.saveOtpToStore(email, otp);
 
       const token = generateToken(user);
       await user.save();
@@ -202,6 +201,7 @@ export const authController = {
         email: googleUser.email,
         avatar: googleUser.picture,
         role: "rider",
+        isEmailVerified: true,
       });
 
       const jwtToken = generateToken(user);
