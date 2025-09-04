@@ -95,14 +95,17 @@ export const messageController = {
         if (msg.multipleImages && msg.multipleImages.length > 0) {
           msg.multipleImages = msg.multipleImages.map((image) => {
             try {
+              const decryptedUrl = decrypt(image.mediaUrl, image.mediaIv);
               return {
                 ...image,
-                mediaUrl: decrypt(image.mediaUrl, image.mediaIv),
+                mediaUrl: decryptedUrl || image.mediaUrl, // Fallback to original if decryption fails
               };
             } catch (e) {
-              console.log(e);
+              console.log('Error decrypting image URL:', e);
               return image; // Return the original image if decryption fails
             }
+          }).filter((image): image is { mimetype: string; mediaUrl: string; mediaIv: string; filename: string } => {
+            return image.mediaUrl !== null && image.mediaUrl !== undefined;
           });
         }
 
@@ -111,17 +114,20 @@ export const messageController = {
           msg.replyToMessage.multipleImages &&
           msg.replyToMessage.multipleImages.length > 0
         ) {
-          msg.replyToMessage.multipleImages =
+          msg.replyToMessage.multipleImages = 
             msg.replyToMessage.multipleImages.map((image) => {
               try {
+                const decryptedUrl = decrypt(image.mediaUrl, image.mediaIv);
                 return {
                   ...image,
-                  mediaUrl: decrypt(image.mediaUrl, image.mediaIv),
+                  mediaUrl: decryptedUrl || image.mediaUrl, // Fallback to original if decryption fails
                 };
               } catch (e) {
-                console.log(e);
+                console.log('Error decrypting reply image URL:', e);
                 return image; // Return the original image if decryption fails
               }
+            }).filter((image): image is { mimetype: string; mediaUrl: string; mediaIv: string; filename: string } => {
+              return image.mediaUrl !== null && image.mediaUrl !== undefined;
             });
         }
         return msg;
