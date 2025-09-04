@@ -181,12 +181,7 @@ export const userController = {
       } = req.body;
 
       // === Validate request ===
-      if (
-        !carSeat ||
-        !pickupLocation ||
-        !dropoffLocation ||
-        wheelChairAccessible === undefined
-      ) {
+      if (!carSeat || !pickupLocation || !dropoffLocation) {
         return res.status(400).json({ message: "All fields are required" });
       }
 
@@ -227,13 +222,12 @@ export const userController = {
 
       const declinedDrivers = currentRide?.excluded_drivers || [];
 
-      // === Find top 10 nearby drivers ===
-      const closestDrivers = await User.find({
+      // === Build base query ===
+      const driverQuery: any = {
         _id: { $nin: declinedDrivers },
         role: "driver",
         account_status: "active",
         availability_status: "online",
-        "driverProfile.wheelChairAccessible": wheelChairAccessible,
         "driverProfile.carSeat": { $gte: carSeat },
         location: {
           $near: {
@@ -244,7 +238,15 @@ export const userController = {
             $maxDistance: 10000, // 10 km
           },
         },
-      })
+      };
+
+      // === Add wheelchair filter only if provided ===
+      if (wheelChairAccessible === true) {
+        driverQuery["driverProfile.wheelChairAccessible"] =
+          wheelChairAccessible;
+      }
+
+      const closestDrivers = await User.find(driverQuery)
         .limit(10)
         .select(
           "driverProfile avatar first_name last_name email rating location"
@@ -857,20 +859,18 @@ export const userController = {
         createdAt: rating.createdAt,
       }));
 
-      res
-        .status(200)
-        .json({
-          message: "Ratings found",
-          data: response,
-          pagination: {
-            page,
-            limit,
-            total: ratings.length,
-            totalPages: Math.ceil(ratings.length / limit),
-            hasNextPage: page < Math.ceil(ratings.length / limit),
-            hasPrevPage: page > 1,
-          },
-        });
+      res.status(200).json({
+        message: "Ratings found",
+        data: response,
+        pagination: {
+          page,
+          limit,
+          total: ratings.length,
+          totalPages: Math.ceil(ratings.length / limit),
+          hasNextPage: page < Math.ceil(ratings.length / limit),
+          hasPrevPage: page > 1,
+        },
+      });
     } catch (error) {
       console.error(error);
       res.status(500).json({ message: "Internal Server Error" });
