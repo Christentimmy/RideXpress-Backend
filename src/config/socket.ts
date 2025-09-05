@@ -28,6 +28,9 @@ export function setupSocket(server: any) {
         const userId = socket.data.user.id;
         const user = await User.findById(userId);
 
+        // Update user as online
+        await User.findByIdAndUpdate(userId, { availability_status: "online" });
+
 
         // Check if the user already has a socket connected
         if (onlineUsers.has(userId)) {
@@ -41,7 +44,7 @@ export function setupSocket(server: any) {
         }
 
         socket.join(userId);
-        
+
 
         // Register new connection
         onlineUsers.set(userId, socket.id);
@@ -64,12 +67,13 @@ export function setupSocket(server: any) {
             socket.join(ride._id.toString());
         });
 
-        socket.on("disconnect", () => {
+        socket.on("disconnect", async () => {
             console.log("User disconnected:", socket.data.user.id);
+            await User.findByIdAndUpdate(userId, { availability_status: "offline" });
         });
     });
 
-    return io;
+    return io;  
 }
 
 export { io };
