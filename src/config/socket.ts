@@ -23,13 +23,13 @@ export function setupSocket(server: any) {
     // Handle connection
     io.on("connection", async (socket) => {
         console.log("User connected:", socket.data.user.id);
-        socketController.updateLocation(io, socket);
-
         const userId = socket.data.user.id;
         const user = await User.findById(userId);
 
         // Update user as online
-        await User.findByIdAndUpdate(userId, { availability_status: "online" });
+        await User.findByIdAndUpdate(userId, { availability_status: "online" }, { new: true });
+
+        socketController.updateLocation(io, socket);
 
 
         // Check if the user already has a socket connected
@@ -73,7 +73,7 @@ export function setupSocket(server: any) {
         });
     });
 
-    return io;  
+    return io;
 }
 
 export { io };
