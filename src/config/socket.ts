@@ -27,7 +27,8 @@ export function setupSocket(server: any) {
         const user = await User.findById(userId);
 
         // Update user as online
-        await User.findByIdAndUpdate(userId, { availability_status: "online" }, { new: true });
+        const updatedUser = await User.findByIdAndUpdate(userId, { availability_status: "online" }, { new: true });
+        console.log("Updated user status to online:", updatedUser);
 
         socketController.updateLocation(io, socket);
 
