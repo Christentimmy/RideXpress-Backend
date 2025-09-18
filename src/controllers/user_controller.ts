@@ -1709,8 +1709,13 @@ export const userController = {
     }
   },
 
-  callDriver: async (req: Request, res: Response) => {
+  call: async (req: Request, res: Response) => {
     try {
+      const userId = res.locals.userId;
+      if(!userId) {
+        res.status(400).json({ message: "User not found" });
+        return;
+      }
       if(!req.body) {
         res.status(400).json({ message: "Bad request" });
         return;
