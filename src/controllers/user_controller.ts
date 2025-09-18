@@ -1711,7 +1711,6 @@ export const userController = {
 
   callDriver: async (req: Request, res: Response) => {
     try {
-      const userId = res.locals.userId;
       if(!req.body) {
         res.status(400).json({ message: "Bad request" });
         return;
