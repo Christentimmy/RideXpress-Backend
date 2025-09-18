@@ -1708,4 +1708,31 @@ export const userController = {
       res.status(500).json({ message: "Internal server error" });
     }
   },
+
+  callDriver: async (req: Request, res: Response) => {
+    try {
+      const userId = res.locals.userId;
+      if(!req.body) {
+        res.status(400).json({ message: "Bad request" });
+        return;
+      }
+      const { tripId } = req.body;
+      if (!tripId) {
+        res.status(400).json({ message: "Trip ID is required" });
+        return;
+      }
+      const trip = await Ride.findById(tripId);
+      if (!trip) {
+        res.status(404).json({ message: "Trip not found" });
+        return;
+      }
+
+      
+
+      res.status(200).json({ message: "Driver called successfully" });
+    } catch (error) {
+      console.error("Error in callDriver:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  },
 };

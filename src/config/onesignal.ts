@@ -9,6 +9,8 @@ const sendPushNotification = async (
   oneSignalId: string,
   message: string,
   userId: mongoose.Types.ObjectId,
+  data: any = {},
+  buttons: any[] = []
 ) => {
   const oneSignalAppId = process.env.ONESIGNAL_APP_ID;
   const oneSignalApiKey = process.env.ONESIGNAL_API_KEY;
@@ -16,8 +18,10 @@ const sendPushNotification = async (
   const payload = {
     app_id: oneSignalAppId,
     include_player_ids: [oneSignalId],
-    headings: { en: "Notification Title" },
+    headings: { en: "Notification" },
     contents: { en: message },
+    data,
+    buttons,
   };
 
   try {
@@ -27,10 +31,7 @@ const sendPushNotification = async (
         "Content-Type": "application/json",
       },
     });
-    Notification.create({
-      userId: userId,
-      message,
-    });
+    await Notification.create({ userId, message });
   } catch (error: any) {
     console.error(
       "Error sending notification:",
@@ -38,5 +39,6 @@ const sendPushNotification = async (
     );
   }
 };
+
 
 export default sendPushNotification;
