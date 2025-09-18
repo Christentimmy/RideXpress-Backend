@@ -1712,11 +1712,11 @@ export const userController = {
   call: async (req: Request, res: Response) => {
     try {
       const userId = res.locals.userId;
-      if(!userId) {
+      if (!userId) {
         res.status(400).json({ message: "User not found" });
         return;
       }
-      if(!req.body) {
+      if (!req.body) {
         res.status(400).json({ message: "Bad request" });
         return;
       }
@@ -1725,13 +1725,30 @@ export const userController = {
         res.status(400).json({ message: "Trip ID is required" });
         return;
       }
-      const trip = await Ride.findById(tripId);
+      const trip = await Ride.findById(tripId).populate<{ driver: IUser }>("driver");
       if (!trip) {
         res.status(404).json({ message: "Trip not found" });
         return;
       }
 
-      
+      const driver = trip.driver;
+      if (!driver?.one_signal_id) {
+        return res.status(400).json({ message: "Driver has no OneSignal ID" });
+      }
+
+      await sendPushNotification(
+        driver.one_signal_id,
+        "Incoming call from passenger",
+        driver._id,
+        {
+          type: "call",
+          tripId: tripId,
+        },
+        [
+          { id: "accept", text: "Accept" },
+          { id: "decline", text: "Decline" },
+        ]
+      );
 
       res.status(200).json({ message: "Driver called successfully" });
     } catch (error) {
