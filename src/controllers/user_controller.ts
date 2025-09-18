@@ -1711,8 +1711,9 @@ export const userController = {
 
   call: async (req: Request, res: Response) => {
     try {
-      const userId = res.locals.userId;
-      if (!userId) {
+      
+      const user = res.locals.user;
+      if (!user) {
         res.status(400).json({ message: "User not found" });
         return;
       }
@@ -1725,24 +1726,48 @@ export const userController = {
         res.status(400).json({ message: "Trip ID is required" });
         return;
       }
-      const trip = await Ride.findById(tripId).populate<{ driver: IUser }>("driver");
+
+      // Find the trip and populate both driver and rider information
+      const trip = await Ride.findById(tripId)
+        .populate<{ driver: IUser }>("driver")
+        .populate<{ rider: IUser }>("rider");
+
       if (!trip) {
         res.status(404).json({ message: "Trip not found" });
         return;
       }
 
-      const driver = trip.driver;
-      if (!driver?.one_signal_id) {
-        return res.status(400).json({ message: "Driver has no OneSignal ID" });
+      // Determine who is calling and who should receive the call
+      let recipient: IUser | null = null;
+      let notificationTitle = "";
+
+      if (user.role === "driver") {
+        // Driver is calling the rider
+        recipient = trip.rider as IUser;
+        notificationTitle = "Incoming call from your driver";
+      } else {
+        // Rider is calling the driver
+        recipient = trip.driver as IUser;
+        notificationTitle = "Incoming call from your passenger";
       }
 
+      if (!recipient?.one_signal_id) {
+        return res
+          .status(400)
+          .json({ message: "Recipient is not available for calls" });
+      }
+
+      // Send push notification to the recipient
       await sendPushNotification(
-        driver.one_signal_id,
-        "Incoming call from passenger",
-        driver._id,
+        recipient.one_signal_id,
+        notificationTitle,
+        recipient._id,
         {
           type: "call",
           tripId: tripId,
+          callerId: user._id,
+          callerName: `${user.first_name} ${user.last_name}`,
+          callerRole: user.role,
         },
         [
           { id: "accept", text: "Accept" },
@@ -1750,9 +1775,12 @@ export const userController = {
         ]
       );
 
-      res.status(200).json({ message: "Driver called successfully" });
+      res.status(200).json({
+        message: "Call initiated successfully",
+        recipientId: recipient._id,
+      });
     } catch (error) {
-      console.error("Error in callDriver:", error);
+      console.error("Error in call function:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   },
