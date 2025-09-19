@@ -38,6 +38,7 @@ router.get("/get-user-status", userController.getUserStatus);
 
 router.use(statusChecker);
 
+router.post("/call", userController.call);
 router.get("/driver-ride-requests", userController.driverRideRequests);
 router.post("/find-nearby-drivers", userController.findNearByDrivers);
 router.get("/get-all-ride-request", userController.getAllRideRequest);

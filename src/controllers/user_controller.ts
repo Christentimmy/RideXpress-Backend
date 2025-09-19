@@ -1424,9 +1424,12 @@ export const userController = {
         status: "cancelled",
       });
 
-      const acceptanceRatePercentage = (acceptanceRate / allTripCounts) * 100;
-      const cancellationRatePercentage =
-        (cancellationRate / allTripCounts) * 100;
+      const acceptanceRatePercentage = Math.trunc(
+        (acceptanceRate / allTripCounts) * 100
+      );
+      const cancellationRatePercentage = Math.trunc(
+        (cancellationRate / allTripCounts) * 100
+      );
 
       res.status(200).json({
         message: "Driver ride stats",
@@ -1711,7 +1714,7 @@ export const userController = {
 
   call: async (req: Request, res: Response) => {
     try {
-      
+
       const user = res.locals.user;
       if (!user) {
         res.status(400).json({ message: "User not found" });
@@ -1750,6 +1753,7 @@ export const userController = {
         recipient = trip.driver as IUser;
         notificationTitle = "Incoming call from your passenger";
       }
+      // console.log("recipient", recipient);
 
       if (!recipient?.one_signal_id) {
         return res
@@ -1768,11 +1772,14 @@ export const userController = {
           callerId: user._id,
           callerName: `${user.first_name} ${user.last_name}`,
           callerRole: user.role,
+          notificationType: 'call'
         },
         [
           { id: "accept", text: "Accept" },
           { id: "decline", text: "Decline" },
-        ]
+        ],
+        60,
+        10,
       );
 
       res.status(200).json({

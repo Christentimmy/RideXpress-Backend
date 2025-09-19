@@ -10,7 +10,9 @@ const sendPushNotification = async (
   message: string,
   userId: mongoose.Types.ObjectId,
   data: any = {},
-  buttons: any[] = []
+  buttons: any[] = [],
+  ttl?: number | null,
+  priority?: number | null,
 ) => {
   const oneSignalAppId = process.env.ONESIGNAL_APP_ID;
   const oneSignalApiKey = process.env.ONESIGNAL_API_KEY;
@@ -22,6 +24,8 @@ const sendPushNotification = async (
     contents: { en: message },
     data,
     buttons,
+    ttl,
+    priority,
   };
 
   try {
@@ -39,6 +43,5 @@ const sendPushNotification = async (
     );
   }
 };
-
 
 export default sendPushNotification;
